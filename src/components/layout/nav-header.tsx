@@ -2,14 +2,21 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Plus, MessageSquareCode, Wallet, PieChart, ArrowLeftRight } from "lucide-react"
+import { Plus, MessageSquareCode, Wallet, PieChart, ArrowLeftRight, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { QuickAddDialog } from "@/components/transactions/quick-add-dialog"
+import { logoutAction } from "@/actions/auth-actions"
 
 export function NavHeader() {
   const pathname = usePathname()
   const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  // Hide nav items on login page
+  if (pathname === "/login") {
+    return null
+  }
 
   const navItems = [
     { label: "Visão Geral", href: "/", icon: Wallet },
@@ -17,6 +24,13 @@ export function NavHeader() {
     { label: "Orçamentos", href: "/budgets", icon: PieChart },
     { label: "WhatsApp Bot", href: "/whatsapp", icon: MessageSquareCode },
   ]
+
+  const handleLogout = async () => {
+    if (confirm("Deseja bloquear o acesso e sair do painel?")) {
+      setLoggingOut(true)
+      await logoutAction()
+    }
+  }
 
   return (
     <>
@@ -63,7 +77,7 @@ export function NavHeader() {
             </nav>
           </div>
 
-          {/* Right Action: Quick Add Button */}
+          {/* Right Action: Quick Add Button & Logout */}
           <div className="flex items-center space-x-3">
             <Link
               href="/whatsapp"
@@ -80,6 +94,17 @@ export function NavHeader() {
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>Lançamento</span>
+            </Button>
+
+            <Button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              variant="ghost"
+              size="icon-xs"
+              title="Bloquear / Sair"
+              className="text-zinc-500 hover:text-white hover:bg-zinc-800 h-8 w-8 rounded-md"
+            >
+              <LogOut className="w-3.5 h-3.5" />
             </Button>
           </div>
         </div>
