@@ -1,0 +1,75 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Category {
+  id           String        @id @default(cuid())
+  name         String
+  type         String        // "INCOME" | "EXPENSE"
+  icon         String?       // Lucide icon name
+  color        String?       // Accent color identifier: green, red, yellow, blue
+  budgetPlans  BudgetPlan[]
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+}
+
+model Transaction {
+  id             String       @id @default(cuid())
+  description    String
+  amount         Float
+  type           String       // "INCOME" | "EXPENSE"
+  isRecurring    Boolean      @default(false)
+  recurrenceRule String?      // "MONTHLY", "WEEKLY", "YEARLY"
+  dueDate        DateTime     @default(now())
+  paidAt         DateTime?
+  status         String       @default("COMPLETED") // "PENDING" | "COMPLETED"
+  paymentMethod  String?      // "PIX", "CREDIT_CARD", "DEBIT", "CASH"
+  source         String       @default("MANUAL")    // "MANUAL" | "WHATSAPP" | "RECURRING"
+  
+  categoryId     String
+  category       Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model BudgetPlan {
+  id             String       @id @default(cuid())
+  categoryId     String
+  category       Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  targetAmount   Float
+  month          Int          // 1-12
+  year           Int
+  alertThreshold Float        @default(0.80) // 80% triggers amber warning
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([categoryId, month, year])
+}
+
+model WhatsAppConfig {
+  id              String       @id @default("default")
+  authorizedPhone String       @default("5511999999999")
+  webhookSecret   String?
+  provider        String       @default("SIMULATOR") // "SIMULATOR" | "EVOLUTION" | "META"
+  isActive        Boolean      @default(true)
+  updatedAt       DateTime     @updatedAt
+}
+
+model WhatsAppMessageLog {
+  id            String        @id @default(cuid())
+  rawMessage    String
+  senderPhone   String
+  parsedData    String?       // JSON string
+  status        String        // "SUCCESS" | "IGNORED" | "ERROR"
+  replyText     String?
+  errorMessage  String?
+  createdAt     DateTime      @default(now())
+}

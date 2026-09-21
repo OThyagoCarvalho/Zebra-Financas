@@ -1,0 +1,274 @@
+"use server"
+
+import { revalidatePath } from "next/cache"
+import { db } from "@/lib/db"
+import { parseFinancialMessage } from "@/lib/nlp-parser"
+import { getFinancialData } from "@/lib/budget-engine"
+
+export async function getFinancialOverviewAction(year: number, month: number, cutoffDay?: number) {
+  return await getFinancialData(year, month, cutoffDay)
+}
+
+export async function getCategoriesAction() {
+  return await db.category.findMany({
+    orderBy: { name: "asc" },
+  })
+}
+
+export async function createTransactionAction(formData: {
+  description: string
+  amount: number
+  type: "INCOME" | "EXPENSE"
+  isRecurring: boolean
+  recurrenceRule?: string
+  categoryId: string
+  dueDate: string // YYYY-MM-DD
+  paymentMethod?: string
+  status?: string
+}) {
+  const transaction = await db.transaction.create({
+    data: {
+      description: formData.description,
+      amount: Number(formData.amount),
+      type: formData.type,
+      isRecurring: formData.isRecurring,
+      recurrenceRule: formData.isRecurring ? formData.recurrenceRule || "MONTHLY" : null,
+      categoryId: formData.categoryId,
+      dueDate: new Date(formData.dueDate),
+      paidAt: formData.status === "COMPLETED" ? new Date(formData.dueDate) : null,
+      status: formData.status || "COMPLETED",
+      paymentMethod: formData.paymentMethod || "PIX",
+      source: "MANUAL",
+    },
+  })
+
+  revalidatePath("/")
+  revalidatePath("/transactions")
+  revalidatePath("/budgets")
+  return { success: true, transaction }
+}
+
+export async function deleteTransactionAction(id: string) {
+  await db.transaction.delete({
+    where: { id },
+  })
+
+  revalidatePath("/")
+  revalidatePath("/transactions")
+  revalidatePath("/budgets")
+  return { success: true }
+}
+
+export async function toggleTransactionStatusAction(id: string) {
+  const current = await db.transaction.findUnique({
+    where: { id },
+  })
+
+  if (!current) return { success: false, error: "Not found" }
+
+  const newStatus = current.status === "COMPLETED" ? "PENDING" : "COMPLETED"
+  const updated = await db.transaction.update({
+    where: { id },
+    data: {
+      status: newStatus,
+      paidAt: newStatus === "COMPLETED" ? new Date() : null,
+    },
+  })
+
+  revalidatePath("/")
+  revalidatePath("/transactions")
+  return { success: true, transaction: updated }
+}
+
+export async function upsertBudgetPlanAction(
+  categoryId: string,
+  month: number,
+  year: number,
+  targetAmount: number
+) {
+  const plan = await db.budgetPlan.upsert({
+    where: {
+      categoryId_month_year: {
+        categoryId,
+        month,
+        year,
+      },
+    },
+    update: {
+      targetAmount: Number(targetAmount),
+    },
+    create: {
+      categoryId,
+      month,
+      year,
+      targetAmount: Number(targetAmount),
+    },
+  })
+
+  revalidatePath("/")
+  revalidatePath("/budgets")
+  return { success: true, plan }
+}
+
+export async function processWhatsAppMessageAction(senderPhone: string, messageText: string) {
+  const config = await db.whatsAppConfig.findFirst()
+  
+  // Security check: phone number check if configured
+  if (config && config.authorizedPhone && config.provider !== "SIMULATOR") {
+    const cleanSender = senderPhone.replace(/\D/g, "")
+    const cleanAuth = config.authorizedPhone.replace(/\D/g, "")
+    if (!cleanSender.includes(cleanAuth) && !cleanAuth.includes(cleanSender)) {
+      return {
+        success: false,
+        error: "Unauthorized phone number",
+        replyMessage: "🚫 Número não autorizado para realizar lançamentos neste cofre financeiro.",
+      }
+    }
+  }
+
+  const parsed = await parseFinancialMessage(messageText)
+
+  if (!parsed.success || !parsed.categoryId) {
+    await db.whatsAppMessageLog.create({
+      data: {
+        rawMessage: messageText,
+        senderPhone,
+        status: "ERROR",
+        replyText: parsed.replyMessage,
+        errorMessage: "Could not parse amount or category",
+      },
+    })
+    return {
+      success: false,
+      replyMessage: parsed.replyMessage,
+    }
+  }
+
+  // Create transaction from WhatsApp message
+  const now = new Date()
+  const transaction = await db.transaction.create({
+    data: {
+      description: parsed.description,
+      amount: parsed.amount,
+      type: parsed.type,
+      isRecurring: parsed.isRecurring,
+      recurrenceRule: parsed.recurrenceRule || null,
+      categoryId: parsed.categoryId,
+      dueDate: now,
+      paidAt: now,
+      status: "COMPLETED",
+      paymentMethod: parsed.paymentMethod,
+      source: "WHATSAPP",
+    },
+  })
+
+  // Append current budget status to reply if expense
+  let budgetReply = parsed.replyMessage
+  if (parsed.type === "EXPENSE") {
+    const currentMonth = now.getMonth() + 1
+    const currentYear = now.getFullYear()
+    const plan = await db.budgetPlan.findUnique({
+      where: {
+        categoryId_month_year: {
+          categoryId: parsed.categoryId,
+          month: currentMonth,
+          year: currentYear,
+        },
+      },
+      include: {
+        category: true,
+      },
+    })
+
+    if (plan && plan.targetAmount > 0) {
+      const monthStart = new Date(currentYear, currentMonth - 1, 1)
+      const monthEnd = new Date(currentYear, currentMonth, 0, 23, 59, 59)
+      const expenses = await db.transaction.aggregate({
+        where: {
+          categoryId: parsed.categoryId,
+          type: "EXPENSE",
+          dueDate: { gte: monthStart, lte: monthEnd },
+        },
+        _sum: { amount: true },
+      })
+
+      const totalSpent = expenses._sum.amount || 0
+      const remaining = plan.targetAmount - totalSpent
+      const pct = Math.round((totalSpent / plan.targetAmount) * 100)
+      const daysLeft = monthEnd.getDate() - now.getDate()
+
+      const warningIcon = pct > 100 ? "🚨 *ESTOURADO!*" : pct > 80 ? "⚠️ *Atenção!*" : "📊"
+
+      budgetReply += `\n\n${warningIcon} *Orçamento (${plan.category.name}):*\n` +
+        `Gasto: R$ ${totalSpent.toFixed(2)} de R$ ${plan.targetAmount.toFixed(2)} (${pct}%)\n` +
+        `Restante: R$ ${remaining.toFixed(2)} para ${daysLeft} dias.`
+    }
+  }
+
+  await db.whatsAppMessageLog.create({
+    data: {
+      rawMessage: messageText,
+      senderPhone,
+      parsedData: JSON.stringify(parsed),
+      status: "SUCCESS",
+      replyText: budgetReply,
+    },
+  })
+
+  revalidatePath("/")
+  revalidatePath("/transactions")
+  revalidatePath("/budgets")
+  revalidatePath("/whatsapp")
+
+  return {
+    success: true,
+    transaction,
+    replyMessage: budgetReply,
+  }
+}
+
+export async function getWhatsAppLogsAction() {
+  return await db.whatsAppMessageLog.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 30,
+  })
+}
+
+export async function getWhatsAppConfigAction() {
+  let config = await db.whatsAppConfig.findFirst()
+  if (!config) {
+    config = await db.whatsAppConfig.create({
+      data: {
+        id: "default",
+        authorizedPhone: "5511999999999",
+        provider: "SIMULATOR",
+        isActive: true,
+      },
+    })
+  }
+  return config
+}
+
+export async function updateWhatsAppConfigAction(data: {
+  authorizedPhone: string
+  provider: string
+  isActive: boolean
+}) {
+  const updated = await db.whatsAppConfig.upsert({
+    where: { id: "default" },
+    update: {
+      authorizedPhone: data.authorizedPhone,
+      provider: data.provider,
+      isActive: data.isActive,
+    },
+    create: {
+      id: "default",
+      authorizedPhone: data.authorizedPhone,
+      provider: data.provider,
+      isActive: data.isActive,
+    },
+  })
+
+  revalidatePath("/whatsapp")
+  return { success: true, config: updated }
+}
