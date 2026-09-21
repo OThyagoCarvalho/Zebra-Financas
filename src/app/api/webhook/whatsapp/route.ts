@@ -33,6 +33,35 @@ export async function POST(req: NextRequest) {
 
     const result = await processWhatsAppMessageAction(senderPhone, messageText)
 
+    // Send automatic reply back to WhatsApp via Evolution API if configured
+    if (
+      process.env.EVOLUTION_API_URL &&
+      process.env.EVOLUTION_API_KEY &&
+      result.replyMessage
+    ) {
+      const instance = process.env.EVOLUTION_INSTANCE_NAME || "zebra"
+      const cleanPhone = senderPhone.replace(/\D/g, "")
+      try {
+        const evoUrl = process.env.EVOLUTION_API_URL.replace(/\/$/, "")
+        await fetch(`${evoUrl}/message/sendText/${instance}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: process.env.EVOLUTION_API_KEY,
+          },
+          body: JSON.stringify({
+            number: cleanPhone,
+            text: result.replyMessage,
+            textMessage: {
+              text: result.replyMessage,
+            },
+          }),
+        })
+      } catch (evoError) {
+        console.error("Erro ao enviar resposta via Evolution API:", evoError)
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       result,
