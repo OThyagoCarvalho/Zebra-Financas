@@ -4,12 +4,27 @@ import { BudgetManager } from "@/components/budgets/budget-manager"
 
 export const dynamic = "force-dynamic"
 
-export default async function BudgetsPage() {
+interface BudgetsPageProps {
+  searchParams: Promise<{ month?: string; year?: string }>
+}
+
+export default async function BudgetsPage({ searchParams }: BudgetsPageProps) {
+  const resolvedParams = await searchParams
   const now = new Date()
-  const month = now.getMonth() + 1
-  const year = now.getFullYear()
-  const currentDay = now.getDate()
+  const currentActualYear = now.getFullYear()
+  const currentActualMonth = now.getMonth() + 1
+  const currentActualDay = now.getDate()
+
+  const month = resolvedParams.month
+    ? Math.min(12, Math.max(1, parseInt(resolvedParams.month, 10)))
+    : currentActualMonth
+  const year = resolvedParams.year
+    ? parseInt(resolvedParams.year, 10)
+    : currentActualYear
+
+  const isCurrentMonth = month === currentActualMonth && year === currentActualYear
   const totalDaysInMonth = getDaysInMonth(year, month)
+  const currentDay = isCurrentMonth ? currentActualDay : (month < currentActualMonth && year <= currentActualYear ? totalDaysInMonth : 1)
 
   // Fetch only expense categories
   const categories = await db.category.findMany({

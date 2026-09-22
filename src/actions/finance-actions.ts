@@ -110,6 +110,108 @@ export async function upsertBudgetPlanAction(
   return { success: true, plan }
 }
 
+export async function createCategoryAction(data: {
+  name: string
+  type: "EXPENSE" | "INCOME"
+  color?: string
+  icon?: string
+  initialBudget?: number
+  month?: number
+  year?: number
+}) {
+  const category = await db.category.create({
+    data: {
+      name: data.name.trim(),
+      type: data.type,
+      color: data.color || (data.type === "INCOME" ? "green" : "blue"),
+      icon: data.icon || (data.type === "INCOME" ? "TrendingUp" : "Tag"),
+    },
+  })
+
+  if (data.type === "EXPENSE" && data.initialBudget && data.initialBudget > 0) {
+    const now = new Date()
+    const month = data.month || now.getMonth() + 1
+    const year = data.year || now.getFullYear()
+
+    await db.budgetPlan.create({
+      data: {
+        categoryId: category.id,
+        targetAmount: Number(data.initialBudget),
+        month,
+        year,
+        alertThreshold: 0.8,
+      },
+    })
+  }
+
+  revalidatePath("/")
+  revalidatePath("/budgets")
+  revalidatePath("/transactions")
+  return { success: true, category }
+}
+
+export async function copyBudgetPlansFromPreviousMonthAction(
+  targetMonth: number,
+  targetYear: number
+) {
+  const prevMonth = targetMonth === 1 ? 12 : targetMonth - 1
+  const prevYear = targetMonth === 1 ? targetYear - 1 : targetYear
+
+  const prevPlans = await db.budgetPlan.findMany({
+    where: {
+      month: prevMonth,
+      year: prevYear,
+    },
+  })
+
+  if (prevPlans.length === 0) {
+    return {
+      success: false,
+      message: `Nenhum orçamento encontrado em ${String(prevMonth).padStart(2, "0")}/${prevYear} para copiar.`,
+    }
+  }
+
+  let copiedCount = 0
+  for (const plan of prevPlans) {
+    await db.budgetPlan.upsert({
+      where: {
+        categoryId_month_year: {
+          categoryId: plan.categoryId,
+          month: targetMonth,
+          year: targetYear,
+        },
+      },
+      update: {
+        targetAmount: plan.targetAmount,
+        alertThreshold: plan.alertThreshold,
+      },
+      create: {
+        categoryId: plan.categoryId,
+        month: targetMonth,
+        year: targetYear,
+        targetAmount: plan.targetAmount,
+        alertThreshold: plan.alertThreshold,
+      },
+    })
+    copiedCount++
+  }
+
+  revalidatePath("/")
+  revalidatePath("/budgets")
+  return { success: true, count: copiedCount }
+}
+
+export async function deleteCategoryAction(categoryId: string) {
+  await db.category.delete({
+    where: { id: categoryId },
+  })
+
+  revalidatePath("/")
+  revalidatePath("/budgets")
+  revalidatePath("/transactions")
+  return { success: true }
+}
+
 export async function processWhatsAppMessageAction(senderPhone: string, messageText: string) {
   const config = await db.whatsAppConfig.findFirst()
   
