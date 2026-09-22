@@ -40,7 +40,48 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, note: "Ignoring bot response message" })
     }
 
-    const result = await processWhatsAppMessageAction(senderPhone, messageText)
+    // Trigger Filter: Only parse messages that start with an intentional trigger
+    // Examples: "# almoço 45", "$ uber 20", "! mercado 150", "z almoço 45", "zebra mercado 150"
+    const trimmed = messageText.trim()
+    const customTrigger = process.env.WHATSAPP_TRIGGER?.trim().toLowerCase()
+
+    let isTriggered = false
+    let cleanMessage = trimmed
+
+    if (customTrigger && trimmed.toLowerCase().startsWith(customTrigger)) {
+      isTriggered = true
+      cleanMessage = trimmed.slice(customTrigger.length).trim()
+    } else {
+      // Check for symbol triggers (#, $, !)
+      const symbolMatch = trimmed.match(/^([#$!])\s*([\s\S]*)$/)
+      if (symbolMatch) {
+        isTriggered = true
+        cleanMessage = symbolMatch[2].trim()
+      } else {
+        // Check for keyword triggers (z, zebra)
+        const wordMatch = trimmed.match(/^(zebra|z)[:\s]\s*([\s\S]*)$/i)
+        if (wordMatch) {
+          isTriggered = true
+          cleanMessage = wordMatch[2].trim()
+        }
+      }
+    }
+
+    // If the message does not have an intentional trigger, ignore silently
+    // (Ensures personal notes, links, and reminders sent to self are never parsed or stored)
+    if (!isTriggered) {
+      return NextResponse.json({
+        ok: true,
+        ignored: true,
+        note: "Non-financial message ignored (no trigger prefix detected)",
+      })
+    }
+
+    if (!cleanMessage) {
+      return NextResponse.json({ ok: true, note: "Empty message body after trigger" })
+    }
+
+    const result = await processWhatsAppMessageAction(senderPhone, cleanMessage)
 
     // Send automatic reply back to WhatsApp via Evolution API if configured
     if (
