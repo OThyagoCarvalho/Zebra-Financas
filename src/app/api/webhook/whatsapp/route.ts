@@ -31,6 +31,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, note: "No text message detected" })
     }
 
+    // Guard: ignore messages sent by the bot itself to prevent infinite response loops
+    if (
+      messageText.startsWith("🦓") ||
+      messageText.startsWith("✅") ||
+      messageText.startsWith("🚫")
+    ) {
+      return NextResponse.json({ ok: true, note: "Ignoring bot response message" })
+    }
+
     const result = await processWhatsAppMessageAction(senderPhone, messageText)
 
     // Send automatic reply back to WhatsApp via Evolution API if configured
