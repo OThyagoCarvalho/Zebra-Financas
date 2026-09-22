@@ -35,14 +35,14 @@ export function NavHeader() {
   return (
     <>
       <header className="sticky top-0 z-40 w-full border-b border-zinc-800 bg-[#09090b]/90 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
           {/* Logo & Brand */}
-          <div className="flex items-center space-x-8">
-            <Link href="/" className="flex items-center space-x-2.5 group">
+          <div className="flex items-center space-x-2 sm:space-x-5 lg:space-x-8 shrink-0">
+            <Link href="/" className="flex items-center space-x-2 group">
               <div className="w-8 h-8 rounded-sm bg-white text-black flex items-center justify-center font-black text-sm tracking-tighter shadow-sm transition-transform group-hover:scale-105">
                 ZB
               </div>
-              <div className="flex flex-col">
+              <div className="hidden sm:flex flex-col">
                 <span className="font-bold text-sm tracking-wider uppercase text-zinc-100">
                   ZEBRA
                 </span>
@@ -52,8 +52,8 @@ export function NavHeader() {
               </div>
             </Link>
 
-            {/* Nav Items */}
-            <nav className="hidden md:flex items-center space-x-1">
+            {/* Nav Items - Icons ALWAYS show on mobile and tablet screens first */}
+            <nav className="flex items-center space-x-1 sm:space-x-1.5">
               {navItems.map((item) => {
                 const Icon = item.icon
                 const isActive =
@@ -63,14 +63,15 @@ export function NavHeader() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    title={item.label}
+                    className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                       isActive
-                        ? "bg-zinc-800 text-white border border-zinc-700"
+                        ? "bg-zinc-800 text-white border border-zinc-700 shadow-xs"
                         : "text-zinc-400 hover:text-white hover:bg-zinc-900"
                     }`}
                   >
-                    <Icon className={`w-3.5 h-3.5 ${isActive ? "text-white" : "text-zinc-400"}`} />
-                    <span>{item.label}</span>
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : "text-zinc-400"}`} />
+                    <span className="hidden lg:inline">{item.label}</span>
                   </Link>
                 )
               })}
@@ -78,14 +79,15 @@ export function NavHeader() {
           </div>
 
           {/* Right Action: Quick Add Button & Logout */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 shrink-0">
             <Button
               onClick={() => setQuickAddOpen(true)}
               size="sm"
-              className="bg-white text-black hover:bg-zinc-200 text-xs font-semibold h-8 px-3.5 gap-1.5 rounded-md border-0"
+              title="Novo Lançamento"
+              className="bg-white text-black hover:bg-zinc-200 text-xs font-semibold h-8 px-2.5 sm:px-3.5 gap-1.5 rounded-md border-0"
             >
-              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>Lançamento</span>
+              <Plus className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
+              <span className="hidden sm:inline">Lançamento</span>
             </Button>
 
             <Button
@@ -99,28 +101,6 @@ export function NavHeader() {
               <LogOut className="w-3.5 h-3.5" />
             </Button>
           </div>
-        </div>
-
-        {/* Mobile Nav Bar */}
-        <div className="md:hidden flex items-center justify-around border-t border-zinc-800/80 px-2 py-2 bg-zinc-950/90">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive =
-              pathname === item.href ||
-              (item.href !== "/" && pathname.startsWith(item.href))
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex flex-col items-center py-1 px-3 rounded text-[11px] font-medium ${
-                  isActive ? "text-white font-semibold" : "text-zinc-500"
-                }`}
-              >
-                <Icon className="w-4 h-4 mb-0.5" />
-                <span>{item.label}</span>
-              </Link>
-            )
-          })}
         </div>
       </header>
 

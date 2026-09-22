@@ -272,13 +272,14 @@ export function CardsView({
 
           <button
             onClick={() => setSelectedCardId("ALL")}
-            className={`text-xs px-2.5 py-1 rounded-md transition-all font-mono ${
+            className={`text-xs px-2.5 py-1 rounded-md transition-all font-mono flex items-center gap-1.5 ${
               selectedCardId === "ALL"
                 ? "bg-white text-black font-semibold"
                 : "text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800"
             }`}
           >
-            Ver Todos os Cartões ({cards.reduce((acc, c) => acc + c.transactionsCount, 0)})
+            <Layers className="w-3.5 h-3.5 shrink-0" />
+            <span>Ver Todos ({cards.reduce((acc, c) => acc + c.transactionsCount, 0)})</span>
           </button>
         </div>
 
@@ -468,6 +469,7 @@ export function CardsView({
 
                       <td className="py-3 px-4 font-medium text-zinc-100">
                         <div className="flex items-center gap-2">
+                          <CreditCard className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                           <span>{t.description}</span>
                           {t.installmentGroupId && (
                             <span

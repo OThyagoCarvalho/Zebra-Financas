@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowDownLeft, ArrowUpRight, Calendar, Check, Clock, Edit3, Filter, Plus, Repeat, Search, Trash2 } from "lucide-react"
+import { ArrowDownLeft, ArrowUpRight, Calendar, Check, Clock, Edit3, Filter, Layers, Plus, Repeat, Search, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { QuickAddDialog } from "@/components/transactions/quick-add-dialog"
@@ -31,43 +31,60 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
     })
   }
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Deseja realmente excluir este lançamento?")) {
-      setLoadingId(id)
-      await deleteTransactionAction(id)
-      setTransactions((prev) => prev.filter((t) => t.id !== id))
-      setLoadingId(null)
-      router.refresh()
-    }
-  }
+  // Filter logic
+  const filtered = transactions.filter((t) => {
+    // 1. Text search
+    const matchesSearch =
+      search === "" ||
+      t.description.toLowerCase().includes(search.toLowerCase()) ||
+      t.category?.name.toLowerCase().includes(search.toLowerCase())
+
+    // 2. Type filter
+    const matchesType = typeFilter === "ALL" || t.type === typeFilter
+
+    // 3. Recurrence filter
+    const matchesRecurrence =
+      recurrenceFilter === "ALL" ||
+      (recurrenceFilter === "RECURRING" && t.isRecurring) ||
+      (recurrenceFilter === "ONEOFF" && !t.isRecurring)
+
+    return matchesSearch && matchesType && matchesRecurrence
+  })
 
   const handleToggle = async (id: string) => {
     setLoadingId(id)
-    const res = await toggleTransactionStatusAction(id)
-    if (res.success && res.transaction) {
-      setTransactions((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, status: res.transaction.status } : t))
-      )
+    try {
+      const res = await toggleTransactionStatusAction(id)
+      if (res.success && res.transaction) {
+        setTransactions((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, status: res.transaction.status } : item))
+        )
+      }
+    } finally {
+      setLoadingId(null)
     }
-    setLoadingId(null)
-    router.refresh()
   }
 
-  const filtered = transactions.filter((t) => {
-    // Type filter
-    if (typeFilter !== "ALL" && t.type !== typeFilter) return false
-    // Recurrence filter
-    if (recurrenceFilter === "RECURRING" && !t.isRecurring) return false
-    if (recurrenceFilter === "ONEOFF" && t.isRecurring) return false
-    // Search
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      const matchDesc = t.description.toLowerCase().includes(q)
-      const matchCat = t.category?.name.toLowerCase().includes(q)
-      if (!matchDesc && !matchCat) return false
+  const handleDelete = async (id: string, desc?: string) => {
+    const label = desc ? `"${desc}"` : "este lançamento"
+    if (!confirm(`Deseja realmente excluir ${label}?`)) return
+
+    setLoadingId(id)
+    try {
+      const res = await deleteTransactionAction(id)
+      if (res.success) {
+        setTransactions((prev) => prev.filter((item) => item.id !== id))
+      }
+    } finally {
+      setLoadingId(null)
     }
-    return true
-  })
+  }
+
+  const handleTransactionUpdated = (updated: any) => {
+    setTransactions((prev) =>
+      prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
+    )
+  }
 
   // Totals for current filter
   const totalIncome = filtered
@@ -83,32 +100,34 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            <span>Transações & Fluxo Financeiro</span>
+            <span>Histórico de Lançamentos</span>
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
-            Controle analítico de entradas e despesas recorrentes e avulsas
+            Gerencie todas as despesas e receitas avulsas ou recorrentes cadastradas
           </p>
         </div>
 
         <Button
           onClick={() => setQuickAddOpen(true)}
-          className="bg-white text-black hover:bg-zinc-200 text-xs font-semibold h-9 px-4 gap-2 rounded-md"
+          size="sm"
+          className="bg-white text-black hover:bg-zinc-200 text-xs font-semibold h-8 px-3.5 gap-1.5 rounded-md self-start sm:self-auto"
         >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
+          <Plus className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
           <span>Novo Lançamento</span>
         </Button>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-[#121215] border border-zinc-800 p-3 rounded-xl">
+      {/* Filters & Search Toolbar */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500" />
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-zinc-500" />
           <Input
+            type="text"
             placeholder="Buscar por descrição ou categoria..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9 text-xs bg-zinc-900 border-zinc-800 text-white focus-visible:ring-1 focus-visible:ring-zinc-400"
+            className="pl-9 bg-[#121215] border-zinc-800 text-xs h-9 focus-visible:ring-1 focus-visible:ring-zinc-400 text-zinc-200"
           />
         </div>
 
@@ -117,35 +136,36 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
           <div className="flex items-center bg-zinc-900 border border-zinc-800 p-0.5 rounded-lg text-xs">
             <button
               onClick={() => setTypeFilter("ALL")}
-              className={`px-3 py-1.5 rounded-md font-medium transition-all ${
+              className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 ${
                 typeFilter === "ALL"
                   ? "bg-zinc-800 text-white font-semibold"
                   : "text-zinc-400 hover:text-white"
               }`}
             >
-              Todas
+              <Filter className="w-3 h-3 shrink-0" />
+              <span>Todas</span>
             </button>
             <button
               onClick={() => setTypeFilter("INCOME")}
-              className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 ${
                 typeFilter === "INCOME"
                   ? "bg-[#10b981]/20 text-[#10b981] font-semibold border border-[#10b981]/30"
                   : "text-zinc-400 hover:text-white"
               }`}
             >
-              <ArrowUpRight className="w-3 h-3" />
-              Entradas
+              <ArrowUpRight className="w-3 h-3 shrink-0" />
+              <span>Entradas</span>
             </button>
             <button
               onClick={() => setTypeFilter("EXPENSE")}
-              className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 ${
                 typeFilter === "EXPENSE"
                   ? "bg-[#ef4444]/20 text-[#ef4444] font-semibold border border-[#ef4444]/30"
                   : "text-zinc-400 hover:text-white"
               }`}
             >
-              <ArrowDownLeft className="w-3 h-3" />
-              Despesas
+              <ArrowDownLeft className="w-3 h-3 shrink-0" />
+              <span>Despesas</span>
             </button>
           </div>
 
@@ -153,30 +173,32 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
           <div className="flex items-center bg-zinc-900 border border-zinc-800 p-0.5 rounded-lg text-xs">
             <button
               onClick={() => setRecurrenceFilter("ALL")}
-              className={`px-2.5 py-1.5 rounded-md font-medium ${
+              className={`px-2.5 py-1.5 rounded-md font-medium flex items-center gap-1.5 ${
                 recurrenceFilter === "ALL" ? "bg-zinc-800 text-white" : "text-zinc-400"
               }`}
             >
-              Tudo
+              <Layers className="w-3 h-3 shrink-0" />
+              <span>Tudo</span>
             </button>
             <button
               onClick={() => setRecurrenceFilter("RECURRING")}
-              className={`px-2.5 py-1.5 rounded-md font-medium flex items-center gap-1 ${
+              className={`px-2.5 py-1.5 rounded-md font-medium flex items-center gap-1.5 ${
                 recurrenceFilter === "RECURRING"
                   ? "bg-[#3b82f6]/20 text-[#3b82f6] font-semibold border border-[#3b82f6]/30"
                   : "text-zinc-400"
               }`}
             >
-              <Repeat className="w-3 h-3" />
-              Recorrentes
+              <Repeat className="w-3 h-3 shrink-0" />
+              <span>Recorrentes</span>
             </button>
             <button
               onClick={() => setRecurrenceFilter("ONEOFF")}
-              className={`px-2.5 py-1.5 rounded-md font-medium ${
+              className={`px-2.5 py-1.5 rounded-md font-medium flex items-center gap-1.5 ${
                 recurrenceFilter === "ONEOFF" ? "bg-zinc-800 text-white font-semibold" : "text-zinc-400"
               }`}
             >
-              Avulsas
+              <Calendar className="w-3 h-3 shrink-0" />
+              <span>Avulsas</span>
             </button>
           </div>
         </div>
