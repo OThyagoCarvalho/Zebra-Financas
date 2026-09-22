@@ -2,15 +2,17 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Plus, Wallet, PieChart, ArrowLeftRight, LogOut, CreditCard } from "lucide-react"
+import { Plus, Wallet, PieChart, ArrowLeftRight, LogOut, CreditCard, HelpCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { QuickAddDialog } from "@/components/transactions/quick-add-dialog"
+import { HelpDialog } from "@/components/help/help-dialog"
 import { logoutAction } from "@/actions/auth-actions"
 
 export function NavHeader() {
   const pathname = usePathname()
   const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
 
   // Hide nav items on login page
@@ -78,8 +80,19 @@ export function NavHeader() {
             </nav>
           </div>
 
-          {/* Right Action: Quick Add Button & Logout */}
-          <div className="flex items-center space-x-2 shrink-0">
+          {/* Right Action: Quick Add Button, Help & Logout */}
+          <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+            <Button
+              onClick={() => setHelpOpen(true)}
+              size="sm"
+              variant="outline"
+              title="Central de Ajuda e Exemplos"
+              className="border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:text-white hover:bg-zinc-800 text-xs h-8 px-2 sm:px-3 gap-1.5 rounded-md"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="hidden sm:inline">Ajuda</span>
+            </Button>
+
             <Button
               onClick={() => setQuickAddOpen(true)}
               size="sm"
@@ -106,6 +119,9 @@ export function NavHeader() {
 
       {/* Global Quick Add Dialog */}
       <QuickAddDialog open={quickAddOpen} onOpenChange={setQuickAddOpen} />
+
+      {/* Global Help Dialog */}
+      <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
     </>
   )
 }

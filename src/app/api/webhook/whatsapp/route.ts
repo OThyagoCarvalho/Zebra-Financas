@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { processWhatsAppMessageAction } from "@/actions/finance-actions"
+import { isHelpCommand } from "@/lib/help-content"
 
 export async function POST(req: NextRequest) {
   try {
@@ -90,7 +91,11 @@ export async function POST(req: NextRequest) {
     let isTriggered = false
     let cleanMessage = trimmed
 
-    if (customTrigger && trimmed.toLowerCase().startsWith(customTrigger)) {
+    // Check if user is asking for help directly (e.g. "ajuda", "help", "comandos")
+    if (isHelpCommand(trimmed)) {
+      isTriggered = true
+      cleanMessage = trimmed
+    } else if (customTrigger && trimmed.toLowerCase().startsWith(customTrigger)) {
       isTriggered = true
       cleanMessage = trimmed.slice(customTrigger.length).trim()
     } else {

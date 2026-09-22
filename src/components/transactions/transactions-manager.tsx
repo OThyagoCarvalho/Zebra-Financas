@@ -225,8 +225,149 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
         </div>
       </div>
 
-      {/* Transactions Table */}
-      <div className="bg-[#121215] border border-zinc-800 rounded-xl overflow-hidden shadow-xs">
+      {/* Mobile Transactions Card List (Always visible edit & delete icons) */}
+      <div className="block md:hidden space-y-3">
+        {filtered.length === 0 ? (
+          <div className="bg-[#121215] border border-zinc-800 rounded-xl p-8 text-center text-zinc-500 font-mono text-xs">
+            Nenhuma transação encontrada com os filtros selecionados.
+          </div>
+        ) : (
+          filtered.map((t) => {
+            const isIncome = t.type === "INCOME"
+            const isPending = t.status === "PENDING"
+            const config = getPaymentMethodConfig(t.paymentMethod)
+
+            return (
+              <div
+                key={t.id}
+                className="bg-[#121215] border border-zinc-800/80 rounded-xl p-3.5 space-y-3 shadow-xs"
+              >
+                {/* Top Row: Icon, Description & Amount */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start space-x-2.5 min-w-0 flex-1">
+                    <div
+                      className={`w-7 h-7 rounded flex items-center justify-center shrink-0 mt-0.5 ${
+                        isIncome
+                          ? "bg-[#10b981]/15 text-[#10b981]"
+                          : "bg-[#ef4444]/15 text-[#ef4444]"
+                      }`}
+                    >
+                      {isIncome ? (
+                        <ArrowUpRight className="w-3.5 h-3.5" />
+                      ) : (
+                        <ArrowDownLeft className="w-3.5 h-3.5" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="font-semibold text-zinc-100 text-xs block truncate">
+                        {t.description}
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                        <span className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700/60 text-[10px] text-zinc-300">
+                          {t.category?.name || "Sem categoria"}
+                        </span>
+                        {config.isCredit ? (
+                          <span
+                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-mono border"
+                            style={{
+                              color: config.color,
+                              backgroundColor: config.bg,
+                              borderColor: config.border,
+                            }}
+                          >
+                            {config.label}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono text-zinc-400">
+                            {config.label}
+                          </span>
+                        )}
+                        {t.isRecurring && (
+                          <span className="text-[10px] text-blue-400 font-mono flex items-center gap-0.5">
+                            <Repeat className="w-2.5 h-2.5" />
+                            Mensal
+                          </span>
+                        )}
+                        {t.source === "WHATSAPP" && (
+                          <span className="text-[10px] text-emerald-400 font-mono">
+                            WhatsApp
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <div
+                      className={`text-xs font-mono font-bold ${
+                        isIncome ? "text-[#10b981]" : "text-[#ef4444]"
+                      }`}
+                    >
+                      {isIncome ? "+" : "-"}
+                      {formatBRL(t.amount)}
+                    </div>
+                    <div className="text-[10px] font-mono text-zinc-500 mt-0.5">
+                      {new Date(t.dueDate).toLocaleDateString("pt-BR")}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Row: Status Toggle & ALWAYS VISIBLE Edit / Delete Buttons */}
+                <div className="flex items-center justify-between pt-2 border-t border-zinc-800/60">
+                  <button
+                    onClick={() => handleToggle(t.id)}
+                    disabled={loadingId === t.id}
+                    className={`px-2 py-1 rounded-full text-[10px] font-semibold border transition-all flex items-center gap-1 ${
+                      isPending
+                        ? "bg-[#f59e0b]/15 text-[#f59e0b] border-[#f59e0b]/30 hover:bg-[#f59e0b]/25"
+                        : "bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white"
+                    }`}
+                  >
+                    {isPending ? (
+                      <>
+                        <Clock className="w-2.5 h-2.5" />
+                        Pendente
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-2.5 h-2.5 text-[#10b981]" />
+                        Efetivado
+                      </>
+                    )}
+                  </button>
+
+                  <div className="flex items-center space-x-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditingTransaction(t)}
+                      className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-1 rounded-md"
+                      title="Editar Lançamento"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>Editar</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDelete(t.id)}
+                      disabled={loadingId === t.id}
+                      className="h-7 px-2 text-xs text-zinc-400 hover:text-[#ef4444] hover:bg-[#ef4444]/10 flex items-center gap-1 rounded-md"
+                      title="Excluir Lançamento"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Excluir</span>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {/* Desktop Transactions Table (hidden on mobile) */}
+      <div className="hidden md:block bg-[#121215] border border-zinc-800 rounded-xl overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
@@ -361,7 +502,7 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
                       </td>
 
                       <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center justify-end space-x-1 opacity-100 transition-opacity">
                           <Button
                             size="icon-xs"
                             variant="ghost"

@@ -16,12 +16,14 @@ import {
   ShieldCheck,
   Smartphone,
   Sparkles,
+  HelpCircle,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { processWhatsAppMessageAction, updateWhatsAppConfigAction } from "@/actions/finance-actions"
+import { HelpDialog } from "@/components/help/help-dialog"
 import { useRouter } from "next/navigation"
 
 interface WhatsAppHubProps {
@@ -40,23 +42,25 @@ export function WhatsAppHub({ initialConfig, initialLogs }: WhatsAppHubProps) {
   // Simulator state
   const [chatInput, setChatInput] = useState("")
   const [sending, setSending] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [chatMessages, setChatMessages] = useState<
     { sender: "user" | "bot"; text: string; time: string }[]
   >([
     {
       sender: "bot",
-      text: "👋 Olá! Sou o assistente financeiro do ZEBRA. Você pode me mandar qualquer lançamento por texto ou áudio, por exemplo:\n\n• \"Almoço 45,90 no débito\"\n• \"Uber 28\"\n• \"Recebi 2500 freela\"\n• \"Internet 120 recorrente\"",
+      text: "👋 Olá! Sou o assistente financeiro do ZEBRA. Você pode me mandar qualquer lançamento iniciando com #, $, ! ou z, ou digite \"# ajuda\" para ver todas as categorias e comandos:\n\n• \"# almoço 45 débito\"\n• \"# mercado 180 pix\"\n• \"# celular 1500 10x xp\"\n• \"# farmacia 85 credito bb\"\n• \"# salario 6500\"\n• \"# aluguel 2200 mensal\"",
       time: "Agora",
     },
   ])
 
   const quickSamples = [
-    "Almoço 42,90 no débito",
-    "Supermercado 380,50 alimentação",
-    "Uber 34,90 transporte",
-    "Recebi 2200 freela do site",
-    "Gasolina 180",
-    "Netflix 55,90 recorrente",
+    "# ajuda",
+    "# almoço 45 débito",
+    "# mercado 180 pix",
+    "# farmacia 85 credito bb",
+    "# celular 1500 10x xp",
+    "# salario 6500",
+    "# aluguel 2200 mensal",
   ]
 
   const handleSendMessage = async (textToSend?: string) => {
@@ -172,8 +176,19 @@ export function WhatsAppHub({ initialConfig, initialLogs }: WhatsAppHubProps) {
                 </div>
               </div>
 
-              <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
-                Simulador Ativo
+              <div className="flex items-center gap-2">
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={() => setHelpOpen(true)}
+                  className="h-7 text-[11px] border-zinc-700 bg-zinc-850 hover:bg-zinc-800 text-amber-300 flex items-center gap-1"
+                >
+                  <HelpCircle className="w-3 h-3 text-amber-400" />
+                  <span>Guia & Ajuda</span>
+                </Button>
+                <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+                  Simulador Ativo
+                </div>
               </div>
             </div>
 
@@ -215,17 +230,24 @@ export function WhatsAppHub({ initialConfig, initialLogs }: WhatsAppHubProps) {
               <span className="text-[10px] font-mono text-zinc-500 whitespace-nowrap pl-1">
                 Sugestões:
               </span>
-              {quickSamples.map((sample, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => handleSendMessage(sample)}
-                  disabled={sending}
-                  className="whitespace-nowrap px-2.5 py-1 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-mono border border-zinc-700 transition-colors"
-                >
-                  {sample}
-                </button>
-              ))}
+              {quickSamples.map((sample, i) => {
+                const isHelp = sample.includes("ajuda")
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => handleSendMessage(sample)}
+                    disabled={sending}
+                    className={`whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-mono border transition-colors ${
+                      isHelp
+                        ? "bg-amber-950/50 hover:bg-amber-900/60 text-amber-300 border-amber-700/60 font-semibold"
+                        : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700"
+                    }`}
+                  >
+                    {sample}
+                  </button>
+                )
+              })}
             </div>
 
             {/* Chat Input */}
@@ -401,6 +423,15 @@ export function WhatsAppHub({ initialConfig, initialLogs }: WhatsAppHubProps) {
           </Tabs>
         </div>
       </div>
+
+      {/* Help Dialog */}
+      <HelpDialog
+        open={helpOpen}
+        onOpenChange={setHelpOpen}
+        onSelectPrompt={(prompt) => {
+          setChatInput(prompt)
+        }}
+      />
     </div>
   )
 }

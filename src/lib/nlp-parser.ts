@@ -1,8 +1,10 @@
 import { db } from "./db"
 import { getPaymentMethodLabel } from "./payment-methods"
+import { isHelpCommand, generateWhatsAppHelpText } from "./help-content"
 
 export interface ParsedTransactionResult {
   success: boolean
+  isHelp?: boolean
   description: string
   amount: number
   type: "INCOME" | "EXPENSE"
@@ -153,6 +155,23 @@ export async function parseFinancialMessage(rawMessage: string): Promise<ParsedT
   const text = rawMessage.trim()
   const lower = text.toLowerCase()
 
+  // 0. Detect Help / Guidance Commands
+  if (isHelpCommand(text)) {
+    const helpText = await generateWhatsAppHelpText()
+    return {
+      success: true,
+      isHelp: true,
+      description: "Guia de Comandos & Ajuda",
+      amount: 0,
+      type: "EXPENSE",
+      isRecurring: false,
+      categoryName: "Ajuda",
+      confidence: 1.0,
+      rawText: rawMessage,
+      replyMessage: helpText,
+    }
+  }
+
   // 1. Detect Amount (e.g. 42,90 or 42.90 or 1500 or R$ 250,00)
   const amountRegex = /(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)/i
   const amountMatch = text.match(amountRegex)
@@ -264,7 +283,7 @@ export async function parseFinancialMessage(rawMessage: string): Promise<ParsedT
 
   let replyMessage = ""
   if (!success) {
-    replyMessage = `⚠️ Não consegui identificar o valor na sua mensagem.\nExemplo de envio:\n"# Almoço 45,90 no débito", "# Notebook 1200 10x xp" ou "# Salário 5000"`
+    replyMessage = `⚠️ Não consegui identificar os dados na sua mensagem.\n\nExemplos de envio:\n• "# Almoço 45,90 no débito"\n• "# Celular 1200 10x xp"\n• "# Salário 5000 pix"\n\n💡 Digite *# ajuda* para ver a lista de categorias e exemplos de todos os tipos de lançamento.`
   } else {
     const icon = type === "INCOME" ? "🟢" : "🔴"
     const typeLabel = type === "INCOME" ? "Receita lançada" : "Despesa lançada"

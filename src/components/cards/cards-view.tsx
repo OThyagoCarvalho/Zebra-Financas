@@ -443,129 +443,241 @@ export function CardsView({
             Nenhuma compra registrada para este cartão no ciclo {cycleLabel}.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-zinc-900/60 border-b border-zinc-800 text-zinc-400 uppercase text-[10px] tracking-wider">
-                <tr>
-                  <th className="py-2.5 px-4">Data Vencimento</th>
-                  <th className="py-2.5 px-4">Descrição</th>
-                  <th className="py-2.5 px-4">Cartão</th>
-                  <th className="py-2.5 px-4">Categoria</th>
-                  <th className="py-2.5 px-4">Parcela</th>
-                  <th className="py-2.5 px-4 text-right">Valor</th>
-                  <th className="py-2.5 px-4">Status</th>
-                  <th className="py-2.5 px-4 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/60 font-sans">
-                {filteredTransactions.map((t) => {
-                  const cardCfg = getPaymentMethodConfig(t.paymentMethod)
-                  const isPending = t.status === "PENDING"
-                  return (
-                    <tr key={t.id} className="hover:bg-zinc-900/40 transition-colors">
-                      <td className="py-3 px-4 font-mono text-zinc-400 text-[11px]">
-                        {new Date(t.dueDate).toLocaleDateString("pt-BR")}
-                      </td>
-
-                      <td className="py-3 px-4 font-medium text-zinc-100">
-                        <div className="flex items-center gap-2">
+          <>
+            {/* Mobile Card List for Invoice Items */}
+            <div className="block md:hidden divide-y divide-zinc-800/60 font-sans">
+              {filteredTransactions.map((t) => {
+                const cardCfg = getPaymentMethodConfig(t.paymentMethod)
+                const isPending = t.status === "PENDING"
+                return (
+                  <div key={t.id} className="p-3.5 space-y-2.5 bg-zinc-900/20">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <CreditCard className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                          <span>{t.description}</span>
+                          <span className="font-semibold text-zinc-100 text-xs truncate">
+                            {t.description}
+                          </span>
                           {t.installmentGroupId && (
-                            <span
-                              title="Compra parcelada"
-                              className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-amber-950/40 border border-amber-800/60 text-amber-400"
-                            >
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-amber-950/40 border border-amber-800/60 text-amber-400">
                               Parcelado
                             </span>
                           )}
                         </div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <span
-                          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono border"
-                          style={{
-                            color: cardCfg.color,
-                            backgroundColor: cardCfg.bg,
-                            borderColor: cardCfg.border,
-                          }}
-                        >
-                          {cardCfg.label}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-4 text-zinc-400 text-[11px]">
-                        {t.category?.name || "Geral"}
-                      </td>
-
-                      <td className="py-3 px-4 font-mono text-zinc-300 text-[11px]">
-                        {t.totalInstallments && t.totalInstallments > 1 ? (
-                          <span className="text-amber-400 font-semibold">
-                            {t.installmentNumber || 1}/{t.totalInstallments}
+                        <div className="flex items-center gap-1.5 flex-wrap text-[10px] font-mono text-zinc-400 mt-1">
+                          <span
+                            className="inline-flex items-center px-1.5 py-0.2 rounded border text-[9px]"
+                            style={{
+                              color: cardCfg.color,
+                              backgroundColor: cardCfg.bg,
+                              borderColor: cardCfg.border,
+                            }}
+                          >
+                            {cardCfg.label}
                           </span>
-                        ) : (
-                          <span className="text-zinc-500">1x (À vista)</span>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-4 font-mono text-right font-bold text-[#ef4444] text-xs">
-                        {formatBRL(t.amount)}
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <button
-                          onClick={() => handleToggleStatus(t.id)}
-                          disabled={loadingActionId === t.id}
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all flex items-center gap-1 ${
-                            isPending
-                              ? "bg-[#f59e0b]/15 text-[#f59e0b] border-[#f59e0b]/30 hover:bg-[#f59e0b]/25"
-                              : "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30 hover:bg-[#10b981]/25"
-                          }`}
-                        >
-                          {isPending ? (
-                            <>
-                              <Clock className="w-2.5 h-2.5" />
-                              Pendente
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 className="w-2.5 h-2.5" />
-                              Efetivado
-                            </>
-                          )}
-                        </button>
-                      </td>
-
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end space-x-1">
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={() => setEditingTransaction(t)}
-                            className="h-7 w-7 text-zinc-400 hover:text-white hover:bg-zinc-800"
-                            title="Editar lançamento"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            disabled={loadingActionId === t.id}
-                            onClick={() => handleDelete(t)}
-                            className="h-7 w-7 text-zinc-400 hover:text-[#ef4444] hover:bg-[#ef4444]/10"
-                            title="Excluir esta parcela"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                          <span>•</span>
+                          <span>{t.category?.name || "Geral"}</span>
+                          <span>•</span>
+                          <span>
+                            {t.totalInstallments && t.totalInstallments > 1 ? (
+                              <strong className="text-amber-400">
+                                {t.installmentNumber || 1}/{t.totalInstallments}
+                              </strong>
+                            ) : (
+                              "1x"
+                            )}
+                          </span>
                         </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <div className="font-mono text-right font-bold text-[#ef4444] text-xs">
+                          {formatBRL(t.amount)}
+                        </div>
+                        <div className="text-[10px] font-mono text-zinc-500 mt-0.5">
+                          {new Date(t.dueDate).toLocaleDateString("pt-BR")}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1.5 border-t border-zinc-800/40">
+                      <button
+                        onClick={() => handleToggleStatus(t.id)}
+                        disabled={loadingActionId === t.id}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all flex items-center gap-1 ${
+                          isPending
+                            ? "bg-[#f59e0b]/15 text-[#f59e0b] border-[#f59e0b]/30 hover:bg-[#f59e0b]/25"
+                            : "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30 hover:bg-[#10b981]/25"
+                        }`}
+                      >
+                        {isPending ? (
+                          <>
+                            <Clock className="w-2.5 h-2.5" />
+                            Pendente
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            Efetivado
+                          </>
+                        )}
+                      </button>
+
+                      {/* Always visible edit & delete buttons on mobile */}
+                      <div className="flex items-center space-x-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingTransaction(t)}
+                          className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-1"
+                          title="Editar lançamento"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>Editar</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={loadingActionId === t.id}
+                          onClick={() => handleDelete(t)}
+                          className="h-7 px-2 text-xs text-zinc-400 hover:text-[#ef4444] hover:bg-[#ef4444]/10 flex items-center gap-1"
+                          title="Excluir esta parcela"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Excluir</span>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Desktop Invoice Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-zinc-900/60 border-b border-zinc-800 text-zinc-400 uppercase text-[10px] tracking-wider">
+                  <tr>
+                    <th className="py-2.5 px-4">Data Vencimento</th>
+                    <th className="py-2.5 px-4">Descrição</th>
+                    <th className="py-2.5 px-4">Cartão</th>
+                    <th className="py-2.5 px-4">Categoria</th>
+                    <th className="py-2.5 px-4">Parcela</th>
+                    <th className="py-2.5 px-4 text-right">Valor</th>
+                    <th className="py-2.5 px-4">Status</th>
+                    <th className="py-2.5 px-4 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60 font-sans">
+                  {filteredTransactions.map((t) => {
+                    const cardCfg = getPaymentMethodConfig(t.paymentMethod)
+                    const isPending = t.status === "PENDING"
+                    return (
+                      <tr key={t.id} className="hover:bg-zinc-900/40 transition-colors">
+                        <td className="py-3 px-4 font-mono text-zinc-400 text-[11px]">
+                          {new Date(t.dueDate).toLocaleDateString("pt-BR")}
+                        </td>
+
+                        <td className="py-3 px-4 font-medium text-zinc-100">
+                          <div className="flex items-center gap-2">
+                            <CreditCard className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                            <span>{t.description}</span>
+                            {t.installmentGroupId && (
+                              <span
+                                title="Compra parcelada"
+                                className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-amber-950/40 border border-amber-800/60 text-amber-400"
+                              >
+                                Parcelado
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <span
+                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono border"
+                            style={{
+                              color: cardCfg.color,
+                              backgroundColor: cardCfg.bg,
+                              borderColor: cardCfg.border,
+                            }}
+                          >
+                            {cardCfg.label}
+                          </span>
+                        </td>
+
+                        <td className="py-3 px-4 text-zinc-400 text-[11px]">
+                          {t.category?.name || "Geral"}
+                        </td>
+
+                        <td className="py-3 px-4 font-mono text-zinc-300 text-[11px]">
+                          {t.totalInstallments && t.totalInstallments > 1 ? (
+                            <span className="text-amber-400 font-semibold">
+                              {t.installmentNumber || 1}/{t.totalInstallments}
+                            </span>
+                          ) : (
+                            <span className="text-zinc-500">1x (À vista)</span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4 font-mono text-right font-bold text-[#ef4444] text-xs">
+                          {formatBRL(t.amount)}
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <button
+                            onClick={() => handleToggleStatus(t.id)}
+                            disabled={loadingActionId === t.id}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all flex items-center gap-1 ${
+                              isPending
+                                ? "bg-[#f59e0b]/15 text-[#f59e0b] border-[#f59e0b]/30 hover:bg-[#f59e0b]/25"
+                                : "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30 hover:bg-[#10b981]/25"
+                            }`}
+                          >
+                            {isPending ? (
+                              <>
+                                <Clock className="w-2.5 h-2.5" />
+                                Pendente
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="w-2.5 h-2.5" />
+                                Efetivado
+                              </>
+                            )}
+                          </button>
+                        </td>
+
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end space-x-1">
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              onClick={() => setEditingTransaction(t)}
+                              className="h-7 w-7 text-zinc-400 hover:text-white hover:bg-zinc-800"
+                              title="Editar lançamento"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              disabled={loadingActionId === t.id}
+                              onClick={() => handleDelete(t)}
+                              className="h-7 w-7 text-zinc-400 hover:text-[#ef4444] hover:bg-[#ef4444]/10"
+                              title="Excluir esta parcela"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

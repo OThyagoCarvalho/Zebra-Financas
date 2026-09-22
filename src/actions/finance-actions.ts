@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 import { db } from "@/lib/db"
 import { parseFinancialMessage } from "@/lib/nlp-parser"
+import { getHelpStructuredData } from "@/lib/help-content"
 import { getFinancialData, getCycleRange } from "@/lib/budget-engine"
 import { isCreditCard, getPaymentMethodConfig, CREDIT_CARDS } from "@/lib/payment-methods"
 
@@ -561,6 +562,24 @@ export async function processWhatsAppMessageAction(senderPhone: string, messageT
 
   const parsed = await parseFinancialMessage(messageText)
 
+  // If this was a help/guidance query, respond with the help guide immediately
+  if (parsed.isHelp) {
+    await db.whatsAppMessageLog.create({
+      data: {
+        rawMessage: messageText,
+        senderPhone,
+        status: "SUCCESS",
+        replyText: parsed.replyMessage,
+        errorMessage: null,
+      },
+    })
+    return {
+      success: true,
+      isHelp: true,
+      replyMessage: parsed.replyMessage,
+    }
+  }
+
   if (!parsed.success || !parsed.categoryId) {
     await db.whatsAppMessageLog.create({
       data: {
@@ -702,4 +721,8 @@ export async function updateWhatsAppConfigAction(data: {
 
   revalidatePath("/whatsapp")
   return { success: true, config: updated }
+}
+
+export async function getHelpGuideAction() {
+  return await getHelpStructuredData()
 }

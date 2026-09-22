@@ -77,9 +77,9 @@ export function RecentTransactions({ transactions, onUpdate }: RecentTransaction
                   className="py-2.5 flex items-center justify-between group hover:bg-zinc-900/30 px-1 rounded-md transition-colors"
                 >
                   {/* Left: Icon & Description */}
-                  <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1">
                     <div
-                      className={`w-7 h-7 rounded-md flex items-center justify-center ${
+                      className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${
                         isIncome
                           ? "bg-[#10b981]/15 text-[#10b981]"
                           : "bg-[#ef4444]/15 text-[#ef4444]"
@@ -92,9 +92,9 @@ export function RecentTransactions({ transactions, onUpdate }: RecentTransaction
                       )}
                     </div>
 
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-medium text-zinc-200">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-medium text-zinc-200 truncate">
                           {t.description}
                         </span>
                         {t.isRecurring && (
@@ -116,24 +116,24 @@ export function RecentTransactions({ transactions, onUpdate }: RecentTransaction
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500 mt-0.5">
-                        <span>{t.category?.name || "Sem categoria"}</span>
+                      <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] font-mono text-zinc-500 mt-0.5 truncate">
+                        <span className="truncate">{t.category?.name || "Sem categoria"}</span>
                         <span>•</span>
-                        <span>
+                        <span className="shrink-0">
                           {new Date(t.dueDate).toLocaleDateString("pt-BR", {
                             day: "2-digit",
                             month: "short",
                           })}
                         </span>
                         <span>•</span>
-                        <span>{getPaymentMethodLabel(t.paymentMethod)}</span>
+                        <span className="shrink-0">{getPaymentMethodLabel(t.paymentMethod)}</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Right: Amount & Actions */}
-                  <div className="flex items-center space-x-3">
-                    <div className="text-right">
+                  <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+                    <div className="text-right shrink-0">
                       <div
                         className={`text-xs font-mono font-bold ${
                           isIncome ? "text-[#10b981]" : "text-[#ef4444]"
@@ -151,12 +151,13 @@ export function RecentTransactions({ transactions, onUpdate }: RecentTransaction
                       </div>
                     </div>
 
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1">
+                    {/* Action buttons: ALWAYS VISIBLE ON MOBILE */}
+                    <div className="flex items-center space-x-0.5 sm:space-x-1 opacity-100 transition-opacity shrink-0">
                       <Button
                         size="icon-xs"
                         variant="ghost"
                         onClick={() => setEditingTransaction(t)}
-                        className="text-zinc-400 hover:text-white"
+                        className="text-zinc-400 hover:text-white h-7 w-7 p-0"
                         title="Editar"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
@@ -166,7 +167,7 @@ export function RecentTransactions({ transactions, onUpdate }: RecentTransaction
                         variant="ghost"
                         onClick={() => handleToggle(t.id)}
                         disabled={loadingId === t.id}
-                        className="text-zinc-400 hover:text-white"
+                        className="text-zinc-400 hover:text-white h-7 w-7 p-0"
                         title={isPending ? "Marcar como pago" : "Marcar como pendente"}
                       >
                         {isPending ? (
@@ -180,7 +181,7 @@ export function RecentTransactions({ transactions, onUpdate }: RecentTransaction
                         variant="ghost"
                         onClick={() => handleDelete(t.id)}
                         disabled={loadingId === t.id}
-                        className="text-zinc-500 hover:text-[#ef4444]"
+                        className="text-zinc-500 hover:text-[#ef4444] h-7 w-7 p-0"
                         title="Excluir"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
