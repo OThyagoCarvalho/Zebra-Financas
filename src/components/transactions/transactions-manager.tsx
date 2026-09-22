@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { QuickAddDialog } from "@/components/transactions/quick-add-dialog"
 import { EditTransactionDialog } from "@/components/transactions/edit-transaction-dialog"
 import { deleteTransactionAction, toggleTransactionStatusAction } from "@/actions/finance-actions"
+import { getPaymentMethodConfig } from "@/lib/payment-methods"
 import { useRouter } from "next/navigation"
 
 interface TransactionsManagerProps {
@@ -284,8 +285,26 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
                         {new Date(t.dueDate).toLocaleDateString("pt-BR")}
                       </td>
 
-                      <td className="py-3 px-4 font-mono text-zinc-400 text-[11px]">
-                        {t.paymentMethod || "PIX"}
+                      <td className="py-3 px-4 text-[11px]">
+                        {(() => {
+                          const config = getPaymentMethodConfig(t.paymentMethod)
+                          return config.isCredit ? (
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono border"
+                              style={{
+                                color: config.color,
+                                backgroundColor: config.bg,
+                                borderColor: config.border,
+                              }}
+                            >
+                              {config.label}
+                            </span>
+                          ) : (
+                            <span className="font-mono text-zinc-400">
+                              {config.label}
+                            </span>
+                          )
+                        })()}
                       </td>
 
                       <td className="py-3 px-4">

@@ -30,11 +30,14 @@ model Transaction {
   dueDate        DateTime     @default(now())
   paidAt         DateTime?
   status         String       @default("COMPLETED") // "PENDING" | "COMPLETED"
-  paymentMethod  String?      // "PIX", "CREDIT_CARD", "DEBIT", "CASH"
-  source         String       @default("MANUAL")    // "MANUAL" | "WHATSAPP" | "RECURRING"
+  paymentMethod      String?      // "PIX", "CREDIT_BB", "CREDIT_CAIXA", "CREDIT_XP", "CREDIT_INTER", "CREDIT_CARD", "DEBIT", "CASH"
+  source             String       @default("MANUAL")    // "MANUAL" | "WHATSAPP" | "RECURRING"
+  installmentNumber  Int?         // Current installment number (e.g., 1, 2, 3...)
+  totalInstallments  Int?         // Total number of installments (e.g., 10)
+  installmentGroupId String?      // Group ID linking all installments of the same purchase
   
-  categoryId     String
-  category       Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  categoryId         String
+  category           Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt

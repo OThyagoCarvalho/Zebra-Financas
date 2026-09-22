@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createTransactionAction, getCategoriesAction } from "@/actions/finance-actions"
-import { ArrowDownLeft, ArrowUpRight, Calendar, Check, Loader2, Repeat } from "lucide-react"
+import { PAYMENT_METHODS, isCreditCard } from "@/lib/payment-methods"
+import { ArrowDownLeft, ArrowUpRight, Calendar, Check, CreditCard, Loader2, Repeat, Sparkles } from "lucide-react"
 
 interface QuickAddDialogProps {
   open: boolean
@@ -22,6 +23,7 @@ export function QuickAddDialog({ open, onOpenChange, onSuccess }: QuickAddDialog
   const [amount, setAmount] = useState("")
   const [categoryId, setCategoryId] = useState("")
   const [paymentMethod, setPaymentMethod] = useState("PIX")
+  const [installments, setInstallments] = useState(1)
   const [dueDate, setDueDate] = useState(new Date().toISOString().split("T")[0])
   const [status, setStatus] = useState("COMPLETED")
 
@@ -69,12 +71,14 @@ export function QuickAddDialog({ open, onOpenChange, onSuccess }: QuickAddDialog
         dueDate,
         paymentMethod,
         status,
+        installments: isCreditCard(paymentMethod) && type === "EXPENSE" ? installments : 1,
       })
 
       // Reset form
       setDescription("")
       setAmount("")
       setIsRecurring(false)
+      setInstallments(1)
       onOpenChange(false)
       if (onSuccess) onSuccess()
     } catch (err) {
@@ -97,65 +101,39 @@ export function QuickAddDialog({ open, onOpenChange, onSuccess }: QuickAddDialog
             </span>
           </DialogTitle>
           <DialogDescription className="text-xs text-zinc-400">
-            Cadastre transações avulsas ou configure custos/receitas recorrentes.
+            Preencha os dados do lançamento financeiro.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          {/* Type Selector (Despesa vs Entrada) */}
-          <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-900/90 border border-zinc-800 rounded-lg">
-            <button
-              type="button"
-              onClick={() => handleTypeChange("EXPENSE")}
-              className={`flex items-center justify-center gap-2 py-2 rounded-md text-xs font-semibold transition-all ${
-                type === "EXPENSE"
-                  ? "bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/30"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              <ArrowDownLeft className="w-4 h-4 text-[#ef4444]" />
-              <span>Despesa</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTypeChange("INCOME")}
-              className={`flex items-center justify-center gap-2 py-2 rounded-md text-xs font-semibold transition-all ${
-                type === "INCOME"
-                  ? "bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              <ArrowUpRight className="w-4 h-4 text-[#10b981]" />
-              <span>Entrada</span>
-            </button>
-          </div>
-
-          {/* Recurrence Mode Selector */}
-          <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/60 border border-zinc-800/80 rounded-lg">
-            <div className="flex items-center gap-2">
-              <Repeat className={`w-3.5 h-3.5 ${isRecurring ? "text-[#3b82f6]" : "text-zinc-500"}`} />
-              <div className="flex flex-col">
-                <span className="text-xs font-medium text-zinc-200">Lançamento Recorrente?</span>
-                <span className="text-[10px] text-zinc-500">
-                  Repete mensalmente (ex: salário, aluguel)
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsRecurring(!isRecurring)}
-              className={`w-9 h-5 rounded-full transition-colors flex items-center px-0.5 ${
-                isRecurring ? "bg-[#3b82f6] justify-end" : "bg-zinc-700 justify-start"
-              }`}
-            >
-              <span className="w-4 h-4 rounded-full bg-white block shadow-xs" />
-            </button>
-          </div>
+          {/* Income vs Expense Tabs */}
+          <Tabs
+            value={type}
+            onValueChange={handleTypeChange}
+            className="w-full"
+          >
+            <TabsList className="grid grid-cols-2 w-full bg-zinc-900 border border-zinc-800 p-0.5">
+              <TabsTrigger
+                value="EXPENSE"
+                className="data-[state=active]:bg-[#ef4444]/20 data-[state=active]:text-[#ef4444] text-xs font-semibold gap-1.5 transition-all"
+              >
+                <ArrowDownLeft className="w-3.5 h-3.5" />
+                <span>Despesa</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="INCOME"
+                className="data-[state=active]:bg-[#10b981]/20 data-[state=active]:text-[#10b981] text-xs font-semibold gap-1.5 transition-all"
+              >
+                <ArrowUpRight className="w-3.5 h-3.5" />
+                <span>Entrada</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
           {/* Amount & Description */}
-          <div className="grid grid-cols-1 gap-3">
+          <div className="space-y-3">
             <div>
-              <Label className="text-xs font-medium text-zinc-300">Valor (R$)</Label>
+              <Label className="text-xs font-medium text-zinc-300">Valor</Label>
               <div className="relative mt-1">
                 <span className="absolute left-3 top-2.5 text-xs text-zinc-500 font-mono">
                   R$
@@ -209,15 +187,56 @@ export function QuickAddDialog({ open, onOpenChange, onSuccess }: QuickAddDialog
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full mt-1 bg-zinc-900 border border-zinc-800 text-white rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 h-9 font-mono"
+                className="w-full mt-1 bg-zinc-900 border border-zinc-800 text-white rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 h-9 font-medium"
               >
-                <option value="PIX" className="bg-[#121215] text-white">PIX</option>
-                <option value="CREDIT_CARD" className="bg-[#121215] text-white">Cartão de Crédito</option>
-                <option value="DEBIT" className="bg-[#121215] text-white">Cartão de Débito</option>
-                <option value="CASH" className="bg-[#121215] text-white">Dinheiro em Espécie</option>
+                {PAYMENT_METHODS.map((m) => (
+                  <option key={m.id} value={m.id} className="bg-[#121215] text-white">
+                    {m.label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
+
+          {/* Installments for Credit Cards */}
+          {isCreditCard(paymentMethod) && type === "EXPENSE" && (
+            <div className="p-3 rounded-lg bg-zinc-900/80 border border-zinc-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                  <CreditCard className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Parcelamento no Cartão</span>
+                </Label>
+                {installments > 1 && (
+                  <span className="text-[11px] font-mono text-amber-400 font-semibold">
+                    {installments}x de R${" "}
+                    {((parseFloat(amount.replace(",", ".")) || 0) / installments).toLocaleString("pt-BR", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>
+                )}
+              </div>
+
+              <select
+                value={installments}
+                onChange={(e) => setInstallments(parseInt(e.target.value, 10) || 1)}
+                className="w-full bg-[#121215] border border-zinc-800 text-white rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 font-mono h-9"
+              >
+                <option value={1} className="bg-[#121215] text-white">1x à vista</option>
+                {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18, 24].map((num) => (
+                  <option key={num} value={num} className="bg-[#121215] text-white">
+                    {num}x {amount ? `de R$ ${((parseFloat(amount.replace(",", ".")) || 0) / num).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}
+                  </option>
+                ))}
+              </select>
+
+              {installments > 1 && (
+                <p className="text-[11px] text-zinc-400">
+                  As parcelas 2 a {installments} serão projetadas nos meses subsequentes e computadas no orçamento da categoria.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Date & Status */}
           <div className="grid grid-cols-2 gap-3">

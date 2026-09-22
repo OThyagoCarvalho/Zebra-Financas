@@ -1,4 +1,5 @@
 import { db } from "./db"
+import { getPaymentMethodLabel } from "./payment-methods"
 
 export interface ParsedTransactionResult {
   success: boolean
@@ -9,7 +10,8 @@ export interface ParsedTransactionResult {
   recurrenceRule?: "MONTHLY" | "WEEKLY" | "YEARLY"
   categoryName: string
   categoryId?: string
-  paymentMethod?: "PIX" | "CREDIT_CARD" | "DEBIT" | "CASH"
+  paymentMethod?: string
+  installments?: number
   confidence: number
   rawText: string
   replyMessage: string
@@ -169,9 +171,17 @@ export async function parseFinancialMessage(rawMessage: string): Promise<ParsedT
   const isRecurring = RECURRING_KEYWORDS.some((kw) => lower.includes(kw))
   const recurrenceRule = isRecurring ? "MONTHLY" : undefined
 
-  // 4. Detect Payment Method
-  let paymentMethod: "PIX" | "CREDIT_CARD" | "DEBIT" | "CASH" = "PIX"
-  if (lower.includes("crédito") || lower.includes("credito") || lower.includes("cartão") || lower.includes("cartao")) {
+  // 4. Detect Payment Method & Specific Credit Cards
+  let paymentMethod = "PIX"
+  if (lower.includes("bb") || lower.includes("banco do brasil")) {
+    paymentMethod = "CREDIT_BB"
+  } else if (lower.includes("caixa") || lower.includes("cef")) {
+    paymentMethod = "CREDIT_CAIXA"
+  } else if (lower.includes("xp")) {
+    paymentMethod = "CREDIT_XP"
+  } else if (lower.includes("inter") || lower.includes("banco inter")) {
+    paymentMethod = "CREDIT_INTER"
+  } else if (lower.includes("crédito") || lower.includes("credito") || lower.includes("cartão") || lower.includes("cartao")) {
     paymentMethod = "CREDIT_CARD"
   } else if (lower.includes("débito") || lower.includes("debito")) {
     paymentMethod = "DEBIT"
@@ -179,6 +189,20 @@ export async function parseFinancialMessage(rawMessage: string): Promise<ParsedT
     paymentMethod = "CASH"
   } else if (lower.includes("pix")) {
     paymentMethod = "PIX"
+  }
+
+  // 4.1 Detect Installments (ex: "3x", "10x", "em 6 vezes", "em 4 parcelas")
+  let installments = 1
+  const instMatch = lower.match(/(?:em\s+)?(\d+)\s*(?:x|vezes|parcelas)\b/i)
+  if (instMatch && instMatch[1]) {
+    const parsedInst = parseInt(instMatch[1], 10)
+    if (!isNaN(parsedInst) && parsedInst >= 1 && parsedInst <= 48) {
+      installments = parsedInst
+      // If user specified installments and didn't specify debit/cash, treat as credit card
+      if (paymentMethod === "PIX") {
+        paymentMethod = "CREDIT_CARD"
+      }
+    }
   }
 
   // 5. Match or determine Category
@@ -197,10 +221,11 @@ export async function parseFinancialMessage(rawMessage: string): Promise<ParsedT
   }
 
   // 6. Clean Description
-  // Remove matched amount and generic keywords from text to form description
+  // Remove matched amount, generic keywords, banks, and installment markers from text
   let description = text
     .replace(/(?:r\$\s*)?\d+(?:[.,]\d{1,2})?/gi, "")
-    .replace(/\b(hoje|ontem|no|na|de|do|da|com|gastei|paguei|recebi|no crédito|no débito|no pix|no dinheiro|débito|debito|crédito|credito|pix|recorrente|mensal)\b/gi, "")
+    .replace(/(?:em\s+)?\d+\s*(?:x|vezes|parcelas)\b/gi, "")
+    .replace(/\b(hoje|ontem|no|na|de|do|da|com|gastei|paguei|recebi|no crédito|no débito|no pix|no dinheiro|débito|debito|crédito|credito|pix|recorrente|mensal|bb|caixa|xp|inter|banco do brasil|cef)\b/gi, "")
     .replace(/\s+/g, " ")
     .trim()
 
@@ -239,17 +264,25 @@ export async function parseFinancialMessage(rawMessage: string): Promise<ParsedT
 
   let replyMessage = ""
   if (!success) {
-    replyMessage = `⚠️ Não consegui identificar o valor na sua mensagem.\nExemplo de envio:\n"Almoço 45,90 no débito" ou "Recebi 1200 freela"`
+    replyMessage = `⚠️ Não consegui identificar o valor na sua mensagem.\nExemplo de envio:\n"# Almoço 45,90 no débito", "# Notebook 1200 10x xp" ou "# Salário 5000"`
   } else {
     const icon = type === "INCOME" ? "🟢" : "🔴"
     const typeLabel = type === "INCOME" ? "Receita lançada" : "Despesa lançada"
     const recurrenceLabel = isRecurring ? " 🔁 (Recorrente)" : ""
+    const methodLabel = getPaymentMethodLabel(paymentMethod)
+    const instText =
+      installments > 1
+        ? `\n💳 *Parcelamento:* ${installments}x de R$ ${(amount / installments)
+            .toFixed(2)
+            .replace(".", ",")}`
+        : ""
 
-    replyMessage = `${icon} *${typeLabel}!*${recurrenceLabel}\n\n` +
+    replyMessage =
+      `${icon} *${typeLabel}!*${recurrenceLabel}\n\n` +
       `📝 *Descrição:* ${description}\n` +
       `💰 *Valor:* ${formattedAmount}\n` +
       `📁 *Categoria:* ${dbCategory?.name || detectedCategoryName}\n` +
-      `💳 *Forma:* ${paymentMethod}`
+      `💳 *Forma:* ${methodLabel}${instText}`
   }
 
   return {
@@ -262,6 +295,7 @@ export async function parseFinancialMessage(rawMessage: string): Promise<ParsedT
     categoryName: dbCategory?.name || detectedCategoryName,
     categoryId: finalCategoryId,
     paymentMethod,
+    installments,
     confidence: success ? 0.95 : 0.2,
     rawText: rawMessage,
     replyMessage,

@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { updateTransactionAction, getCategoriesAction } from "@/actions/finance-actions"
-import { ArrowDownLeft, ArrowUpRight, Calendar, Check, Loader2, Repeat } from "lucide-react"
+import { PAYMENT_METHODS } from "@/lib/payment-methods"
+import { ArrowDownLeft, ArrowUpRight, Calendar, Check, CreditCard, Loader2, Repeat } from "lucide-react"
 
 interface EditTransactionDialogProps {
   transaction: any | null
@@ -203,16 +204,24 @@ export function EditTransactionDialog({
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs text-zinc-400 font-medium">Forma de Pagamento</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-zinc-400 font-medium">Forma de Pagamento</Label>
+                {transaction?.totalInstallments && transaction?.totalInstallments > 1 && (
+                  <span className="text-[10px] font-mono text-amber-400 font-medium">
+                    Parcela {transaction.installmentNumber || 1}/{transaction.totalInstallments}
+                  </span>
+                )}
+              </div>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 h-9"
               >
-                <option value="PIX" className="bg-[#121215] text-zinc-200">PIX</option>
-                <option value="CREDIT_CARD" className="bg-[#121215] text-zinc-200">Cartão de Crédito</option>
-                <option value="DEBIT" className="bg-[#121215] text-zinc-200">Cartão de Débito</option>
-                <option value="CASH" className="bg-[#121215] text-zinc-200">Dinheiro em Espécie</option>
+                {PAYMENT_METHODS.map((m) => (
+                  <option key={m.id} value={m.id} className="bg-[#121215] text-zinc-200">
+                    {m.label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

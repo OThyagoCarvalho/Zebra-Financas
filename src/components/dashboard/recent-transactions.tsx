@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { deleteTransactionAction, toggleTransactionStatusAction } from "@/actions/finance-actions"
 import { EditTransactionDialog } from "@/components/transactions/edit-transaction-dialog"
+import { getPaymentMethodLabel } from "@/lib/payment-methods"
 import { useState } from "react"
 
 interface RecentTransactionsProps {
@@ -125,7 +126,7 @@ export function RecentTransactions({ transactions, onUpdate }: RecentTransaction
                           })}
                         </span>
                         <span>•</span>
-                        <span>{t.paymentMethod || "PIX"}</span>
+                        <span>{getPaymentMethodLabel(t.paymentMethod)}</span>
                       </div>
                     </div>
                   </div>

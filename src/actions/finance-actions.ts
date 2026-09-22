@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 import { db } from "@/lib/db"
 import { parseFinancialMessage } from "@/lib/nlp-parser"
-import { getFinancialData } from "@/lib/budget-engine"
+import { getFinancialData, getCycleRange } from "@/lib/budget-engine"
+import { isCreditCard, getPaymentMethodConfig, CREDIT_CARDS } from "@/lib/payment-methods"
 
 export async function setCycleStartDayAction(day: number) {
   const cookieStore = await cookies()
@@ -46,10 +47,76 @@ export async function createTransactionAction(formData: {
   dueDate: string // YYYY-MM-DD
   paymentMethod?: string
   status?: string
+  installments?: number
 }) {
+  const method = formData.paymentMethod || "PIX"
+  const installments = formData.installments
+    ? Math.min(48, Math.max(1, Math.round(formData.installments)))
+    : 1
+
+  // Handle multiple installments for credit card purchases
+  if (installments > 1 && formData.type === "EXPENSE" && isCreditCard(method)) {
+    const totalAmount = Math.round(Number(formData.amount) * 100) / 100
+    const baseInstAmount = Math.floor((totalAmount / installments) * 100) / 100
+    const remainder = Math.round((totalAmount - baseInstAmount * installments) * 100) / 100
+    const groupId = `inst_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+
+    const [yearStr, monthStr, dayStr] = formData.dueDate.split("-").map(Number)
+    const baseYear = !isNaN(yearStr) ? yearStr : new Date().getFullYear()
+    const baseMonth = !isNaN(monthStr) ? monthStr : new Date().getMonth() + 1
+    const baseDay = !isNaN(dayStr) ? dayStr : new Date().getDate()
+
+    const createdTransactions = []
+
+    for (let i = 1; i <= installments; i++) {
+      const monthOffset = baseMonth - 1 + (i - 1)
+      const targetYear = baseYear + Math.floor(monthOffset / 12)
+      const targetMonth = (monthOffset % 12) + 1
+      const daysInTargetMonth = new Date(targetYear, targetMonth, 0).getDate()
+      const clampedDay = Math.min(baseDay, daysInTargetMonth)
+
+      const targetDueDate = new Date(Date.UTC(targetYear, targetMonth - 1, clampedDay, 12, 0, 0))
+      const installmentAmount =
+        i === installments
+          ? Math.round((baseInstAmount + remainder) * 100) / 100
+          : baseInstAmount
+
+      const isFirst = i === 1
+      const instStatus = isFirst ? formData.status || "COMPLETED" : "PENDING"
+      const instPaidAt = isFirst && instStatus === "COMPLETED" ? targetDueDate : null
+
+      const created = await db.transaction.create({
+        data: {
+          description: `${formData.description.trim()} (${i}/${installments})`,
+          amount: installmentAmount,
+          type: "EXPENSE",
+          isRecurring: false,
+          recurrenceRule: null,
+          categoryId: formData.categoryId,
+          dueDate: targetDueDate,
+          paidAt: instPaidAt,
+          status: instStatus,
+          paymentMethod: method,
+          source: "MANUAL",
+          installmentNumber: i,
+          totalInstallments: installments,
+          installmentGroupId: groupId,
+        },
+      })
+      createdTransactions.push(created)
+    }
+
+    revalidatePath("/")
+    revalidatePath("/transactions")
+    revalidatePath("/budgets")
+    revalidatePath("/cards")
+    return { success: true, transactions: createdTransactions, transaction: createdTransactions[0] }
+  }
+
+  // Single transaction
   const transaction = await db.transaction.create({
     data: {
-      description: formData.description,
+      description: formData.description.trim(),
       amount: Number(formData.amount),
       type: formData.type,
       isRecurring: formData.isRecurring,
@@ -58,14 +125,17 @@ export async function createTransactionAction(formData: {
       dueDate: new Date(formData.dueDate),
       paidAt: formData.status === "COMPLETED" ? new Date(formData.dueDate) : null,
       status: formData.status || "COMPLETED",
-      paymentMethod: formData.paymentMethod || "PIX",
+      paymentMethod: method,
       source: "MANUAL",
+      installmentNumber: 1,
+      totalInstallments: 1,
     },
   })
 
   revalidatePath("/")
   revalidatePath("/transactions")
   revalidatePath("/budgets")
+  revalidatePath("/cards")
   return { success: true, transaction }
 }
 
@@ -105,6 +175,7 @@ export async function updateTransactionAction(
   revalidatePath("/")
   revalidatePath("/transactions")
   revalidatePath("/budgets")
+  revalidatePath("/cards")
   return { success: true, transaction }
 }
 
@@ -116,7 +187,209 @@ export async function deleteTransactionAction(id: string) {
   revalidatePath("/")
   revalidatePath("/transactions")
   revalidatePath("/budgets")
+  revalidatePath("/cards")
   return { success: true }
+}
+
+export async function deleteInstallmentGroupAction(groupId: string, deleteFutureOnly: boolean = false) {
+  if (deleteFutureOnly) {
+    const now = new Date()
+    await db.transaction.deleteMany({
+      where: {
+        installmentGroupId: groupId,
+        status: "PENDING",
+        dueDate: { gte: now },
+      },
+    })
+  } else {
+    await db.transaction.deleteMany({
+      where: { installmentGroupId: groupId },
+    })
+  }
+
+  revalidatePath("/")
+  revalidatePath("/transactions")
+  revalidatePath("/budgets")
+  revalidatePath("/cards")
+  return { success: true }
+}
+
+export async function markCardInvoiceAsPaidAction(paymentMethod: string, year: number, month: number) {
+  const cycleStartDay = await getCycleStartDayAction()
+  const { startDate, endDate } = getCycleRange(year, month, cycleStartDay)
+
+  await db.transaction.updateMany({
+    where: {
+      paymentMethod,
+      type: "EXPENSE",
+      status: "PENDING",
+      dueDate: {
+        gte: startDate,
+        lte: endDate,
+      },
+    },
+    data: {
+      status: "COMPLETED",
+      paidAt: new Date(),
+    },
+  })
+
+  revalidatePath("/")
+  revalidatePath("/transactions")
+  revalidatePath("/budgets")
+  revalidatePath("/cards")
+  return { success: true }
+}
+
+export async function getCardInvoicesAction(year: number, month: number) {
+  const cycleStartDay = await getCycleStartDayAction()
+  const { startDate, endDate, cycleLabel, totalDaysInCycle } = getCycleRange(year, month, cycleStartDay)
+
+  // Fetch all expense transactions in this cycle
+  const currentCycleTransactions = await db.transaction.findMany({
+    where: {
+      type: "EXPENSE",
+      dueDate: {
+        gte: startDate,
+        lte: endDate,
+      },
+    },
+    include: {
+      category: true,
+    },
+    orderBy: {
+      dueDate: "desc",
+    },
+  })
+
+  // Group by card
+  const cardsSummary: Record<string, {
+    cardId: string
+    config: any
+    totalAmount: number
+    paidAmount: number
+    pendingAmount: number
+    transactionsCount: number
+    transactions: any[]
+  }> = {}
+
+  for (const card of CREDIT_CARDS) {
+    cardsSummary[card.id] = {
+      cardId: card.id,
+      config: card,
+      totalAmount: 0,
+      paidAmount: 0,
+      pendingAmount: 0,
+      transactionsCount: 0,
+      transactions: [],
+    }
+  }
+
+  for (const t of currentCycleTransactions) {
+    if (!isCreditCard(t.paymentMethod)) continue
+    const cardId = t.paymentMethod || "CREDIT_CARD"
+    if (!cardsSummary[cardId]) {
+      cardsSummary[cardId] = {
+        cardId,
+        config: getPaymentMethodConfig(cardId),
+        totalAmount: 0,
+        paidAmount: 0,
+        pendingAmount: 0,
+        transactionsCount: 0,
+        transactions: [],
+      }
+    }
+
+    cardsSummary[cardId].totalAmount += t.amount
+    if (t.status === "COMPLETED") {
+      cardsSummary[cardId].paidAmount += t.amount
+    } else {
+      cardsSummary[cardId].pendingAmount += t.amount
+    }
+    cardsSummary[cardId].transactionsCount += 1
+    cardsSummary[cardId].transactions.push(t)
+  }
+
+  // Future projections for next 6 cycles
+  const projections: {
+    year: number
+    month: number
+    label: string
+    cycleLabel: string
+    totalProjected: number
+    byCard: Record<string, number>
+  }[] = []
+
+  const MONTH_NAMES = [
+    "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+    "Jul", "Ago", "Set", "Out", "Nov", "Dez"
+  ]
+
+  for (let offset = 1; offset <= 6; offset++) {
+    const mIndex = (month - 1) + offset
+    const pYear = year + Math.floor(mIndex / 12)
+    const pMonth = (mIndex % 12) + 1
+    const pRange = getCycleRange(pYear, pMonth, cycleStartDay)
+
+    const pTransactions = await db.transaction.findMany({
+      where: {
+        type: "EXPENSE",
+        dueDate: {
+          gte: pRange.startDate,
+          lte: pRange.endDate,
+        },
+      },
+      select: {
+        amount: true,
+        paymentMethod: true,
+      },
+    })
+
+    let pTotal = 0
+    const byCard: Record<string, number> = {}
+    for (const card of CREDIT_CARDS) {
+      byCard[card.id] = 0
+    }
+
+    for (const pt of pTransactions) {
+      if (isCreditCard(pt.paymentMethod)) {
+        const cId = pt.paymentMethod || "CREDIT_CARD"
+        byCard[cId] = (byCard[cId] || 0) + pt.amount
+        pTotal += pt.amount
+      }
+    }
+
+    projections.push({
+      year: pYear,
+      month: pMonth,
+      label: `${MONTH_NAMES[pMonth - 1]}/${String(pYear).slice(2)}`,
+      cycleLabel: pRange.cycleLabel,
+      totalProjected: pTotal,
+      byCard,
+    })
+  }
+
+  let grandTotal = 0
+  let grandPaid = 0
+  let grandPending = 0
+  for (const card of Object.values(cardsSummary)) {
+    grandTotal += card.totalAmount
+    grandPaid += card.paidAmount
+    grandPending += card.pendingAmount
+  }
+
+  return {
+    year,
+    month,
+    cycleLabel,
+    totalDaysInCycle,
+    cycleStartDay,
+    grandTotal,
+    grandPaid,
+    grandPending,
+    cards: Object.values(cardsSummary),
+    projections,
+  }
 }
 
 export async function toggleTransactionStatusAction(id: string) {
@@ -304,23 +577,21 @@ export async function processWhatsAppMessageAction(senderPhone: string, messageT
     }
   }
 
-  // Create transaction from WhatsApp message
+  // Create transaction from WhatsApp message (supporting installments)
   const now = new Date()
-  const transaction = await db.transaction.create({
-    data: {
-      description: parsed.description,
-      amount: parsed.amount,
-      type: parsed.type,
-      isRecurring: parsed.isRecurring,
-      recurrenceRule: parsed.recurrenceRule || null,
-      categoryId: parsed.categoryId,
-      dueDate: now,
-      paidAt: now,
-      status: "COMPLETED",
-      paymentMethod: parsed.paymentMethod,
-      source: "WHATSAPP",
-    },
+  const createdRes = await createTransactionAction({
+    description: parsed.description,
+    amount: parsed.amount,
+    type: parsed.type,
+    isRecurring: parsed.isRecurring,
+    recurrenceRule: parsed.recurrenceRule || undefined,
+    categoryId: parsed.categoryId,
+    dueDate: now.toISOString().split("T")[0],
+    paymentMethod: parsed.paymentMethod,
+    status: "COMPLETED",
+    installments: parsed.installments || 1,
   })
+  const transaction = createdRes.transaction
 
   // Append current budget status to reply if expense
   let budgetReply = parsed.replyMessage
