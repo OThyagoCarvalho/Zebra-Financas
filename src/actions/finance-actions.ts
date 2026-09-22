@@ -216,15 +216,13 @@ export async function processWhatsAppMessageAction(senderPhone: string, messageT
   const config = await db.whatsAppConfig.findFirst()
   
   // Security check: phone number check if configured
-  if (config && config.authorizedPhone && config.provider !== "SIMULATOR") {
-    const cleanSender = senderPhone.replace(/\D/g, "")
-    const cleanAuth = config.authorizedPhone.replace(/\D/g, "")
-    if (!cleanSender.includes(cleanAuth) && !cleanAuth.includes(cleanSender)) {
-      return {
-        success: false,
-        error: "Unauthorized phone number",
-        replyMessage: "🚫 Número não autorizado para realizar lançamentos neste cofre financeiro.",
-      }
+  const expectedPhone = (process.env.AUTHORIZED_PHONE || config?.authorizedPhone || "5511932199076").replace(/\D/g, "")
+  const cleanSender = senderPhone.replace(/\D/g, "")
+  if (expectedPhone && cleanSender && !cleanSender.includes(expectedPhone) && !expectedPhone.includes(cleanSender)) {
+    return {
+      success: false,
+      error: "Unauthorized phone number",
+      replyMessage: "🚫 Número não autorizado para realizar lançamentos neste cofre financeiro.",
     }
   }
 

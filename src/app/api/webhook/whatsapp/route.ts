@@ -11,7 +11,46 @@ export async function POST(req: NextRequest) {
 
     if (body?.data?.key?.remoteJid) {
       // Evolution API format
-      senderPhone = body.data.key.remoteJid.replace("@s.whatsapp.net", "")
+      const rawJid = body.data.key.remoteJid
+      const fromMe = body.data.key.fromMe
+
+      // 1. Group Filter: Ignore all group chats immediately
+      if (rawJid.includes("@g.us") || body?.data?.key?.participant) {
+        return NextResponse.json({
+          ok: true,
+          ignored: true,
+          note: "Ignored: Group message",
+        })
+      }
+
+      // 2. Self-Chat Filter: Only process messages in the private chat with oneself
+      // In WhatsApp, chatting with yourself has remoteJid = "<your_phone>@s.whatsapp.net"
+      const remotePhone = rawJid.replace("@s.whatsapp.net", "").replace(/\D/g, "")
+      const authorizedPhone = (process.env.AUTHORIZED_PHONE || "5511932199076").replace(/\D/g, "")
+
+      const isSelfChat =
+        remotePhone &&
+        authorizedPhone &&
+        (remotePhone.includes(authorizedPhone) || authorizedPhone.includes(remotePhone))
+
+      if (!isSelfChat) {
+        return NextResponse.json({
+          ok: true,
+          ignored: true,
+          note: "Ignored: Message from external conversation",
+        })
+      }
+
+      // 3. Must be sent by the user (fromMe: true)
+      if (!fromMe) {
+        return NextResponse.json({
+          ok: true,
+          ignored: true,
+          note: "Ignored: Incoming message not sent by owner",
+        })
+      }
+
+      senderPhone = remotePhone
       messageText =
         body.data.message?.conversation ||
         body.data.message?.extendedTextMessage?.text ||
@@ -35,7 +74,10 @@ export async function POST(req: NextRequest) {
     if (
       messageText.startsWith("🦓") ||
       messageText.startsWith("✅") ||
-      messageText.startsWith("🚫")
+      messageText.startsWith("🚫") ||
+      messageText.startsWith("📊") ||
+      messageText.startsWith("🔴") ||
+      messageText.startsWith("🚨")
     ) {
       return NextResponse.json({ ok: true, note: "Ignoring bot response message" })
     }
