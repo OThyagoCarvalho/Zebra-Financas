@@ -1,12 +1,36 @@
 "use client"
 
-import { useState } from "react"
-import { ArrowDownLeft, ArrowUpRight, Calendar, Check, Clock, Edit3, Filter, Layers, Plus, Repeat, Search, Trash2 } from "lucide-react"
+import { useState, useMemo } from "react"
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  ArrowUpDown,
+  Calendar,
+  Check,
+  Clock,
+  Edit3,
+  Filter,
+  Layers,
+  Plus,
+  Repeat,
+  Search,
+  Trash2,
+  Ban,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  SlidersHorizontal,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { QuickAddDialog } from "@/components/transactions/quick-add-dialog"
 import { EditTransactionDialog } from "@/components/transactions/edit-transaction-dialog"
-import { deleteTransactionAction, toggleTransactionStatusAction } from "@/actions/finance-actions"
+import {
+  deleteTransactionAction,
+  toggleTransactionStatusAction,
+  cancelRecurringTransactionAction,
+} from "@/actions/finance-actions"
 import { getPaymentMethodConfig } from "@/lib/payment-methods"
 import { useRouter } from "next/navigation"
 
@@ -14,14 +38,27 @@ interface TransactionsManagerProps {
   initialTransactions: any[]
 }
 
+type SortOption = "DATE_DESC" | "DATE_ASC" | "AMOUNT_DESC" | "AMOUNT_ASC"
+
 export function TransactionsManager({ initialTransactions }: TransactionsManagerProps) {
   const router = useRouter()
   const [transactions, setTransactions] = useState(initialTransactions)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<any | null>(null)
+
+  // Filters
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<"ALL" | "INCOME" | "EXPENSE">("ALL")
   const [recurrenceFilter, setRecurrenceFilter] = useState<"ALL" | "RECURRING" | "ONEOFF">("ALL")
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "COMPLETED" | "PENDING" | "CANCELED">("ALL")
+
+  // Sorting: DEFAULT IS DATE_DESC (most recent date to oldest date)
+  const [sortBy, setSortBy] = useState<SortOption>("DATE_DESC")
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(15)
+
   const [loadingId, setLoadingId] = useState<string | null>(null)
 
   const formatBRL = (val: number) => {
@@ -31,25 +68,89 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
     })
   }
 
-  // Filter logic
-  const filtered = transactions.filter((t) => {
-    // 1. Text search
-    const matchesSearch =
-      search === "" ||
-      t.description.toLowerCase().includes(search.toLowerCase()) ||
-      t.category?.name.toLowerCase().includes(search.toLowerCase())
+  // Filter and Sort
+  const filteredAndSorted = useMemo(() => {
+    // 1. Filter
+    const filtered = transactions.filter((t) => {
+      // Text search
+      const matchesSearch =
+        search === "" ||
+        t.description.toLowerCase().includes(search.toLowerCase()) ||
+        t.category?.name?.toLowerCase().includes(search.toLowerCase())
 
-    // 2. Type filter
-    const matchesType = typeFilter === "ALL" || t.type === typeFilter
+      // Type filter
+      const matchesType = typeFilter === "ALL" || t.type === typeFilter
 
-    // 3. Recurrence filter
-    const matchesRecurrence =
-      recurrenceFilter === "ALL" ||
-      (recurrenceFilter === "RECURRING" && t.isRecurring) ||
-      (recurrenceFilter === "ONEOFF" && !t.isRecurring)
+      // Recurrence filter
+      const matchesRecurrence =
+        recurrenceFilter === "ALL" ||
+        (recurrenceFilter === "RECURRING" && t.isRecurring) ||
+        (recurrenceFilter === "ONEOFF" && !t.isRecurring)
 
-    return matchesSearch && matchesType && matchesRecurrence
-  })
+      // Status filter
+      const matchesStatus =
+        statusFilter === "ALL" || t.status === statusFilter
+
+      return matchesSearch && matchesType && matchesRecurrence && matchesStatus
+    })
+
+    // 2. Sort - default is newest date first to oldest
+    return filtered.sort((a, b) => {
+      if (sortBy === "DATE_DESC") {
+        const diff = new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime()
+        if (diff !== 0) return diff
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      }
+      if (sortBy === "DATE_ASC") {
+        const diff = new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+        if (diff !== 0) return diff
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+      }
+      if (sortBy === "AMOUNT_DESC") {
+        return b.amount - a.amount
+      }
+      if (sortBy === "AMOUNT_ASC") {
+        return a.amount - b.amount
+      }
+      return 0
+    })
+  }, [transactions, search, typeFilter, recurrenceFilter, statusFilter, sortBy])
+
+  // Pagination calculations
+  const totalItems = filteredAndSorted.length
+  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage))
+  const safePage = Math.min(currentPage, totalPages)
+
+  const paginatedTransactions = useMemo(() => {
+    const start = (safePage - 1) * itemsPerPage
+    return filteredAndSorted.slice(start, start + itemsPerPage)
+  }, [filteredAndSorted, safePage, itemsPerPage])
+
+  // Reset pagination when filters change
+  const handleSearchChange = (val: string) => {
+    setSearch(val)
+    setCurrentPage(1)
+  }
+
+  const handleTypeChange = (val: "ALL" | "INCOME" | "EXPENSE") => {
+    setTypeFilter(val)
+    setCurrentPage(1)
+  }
+
+  const handleRecurrenceChange = (val: "ALL" | "RECURRING" | "ONEOFF") => {
+    setRecurrenceFilter(val)
+    setCurrentPage(1)
+  }
+
+  const handleStatusChange = (val: "ALL" | "COMPLETED" | "PENDING" | "CANCELED") => {
+    setStatusFilter(val)
+    setCurrentPage(1)
+  }
+
+  const handleSortChange = (val: SortOption) => {
+    setSortBy(val)
+    setCurrentPage(1)
+  }
 
   const handleToggle = async (id: string) => {
     setLoadingId(id)
@@ -80,18 +181,35 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
     }
   }
 
-  const handleTransactionUpdated = (updated: any) => {
-    setTransactions((prev) =>
-      prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
-    )
+  const handleCancelRecurring = async (t: any) => {
+    if (!confirm(`Deseja realmente cancelar a recorrência de "${t.description}" e todos os lançamentos futuros vinculados a ela?`)) return
+
+    setLoadingId(t.id)
+    try {
+      const res = await cancelRecurringTransactionAction(t.id)
+      if (res.success) {
+        setTransactions((prev) =>
+          prev.map((item) =>
+            item.id === t.id ||
+            (t.installmentGroupId && item.installmentGroupId === t.installmentGroupId && item.status === "PENDING")
+              ? { ...item, status: "CANCELED" }
+              : item
+          )
+        )
+      }
+    } catch (err) {
+      console.error("Failed to cancel recurring transaction", err)
+    } finally {
+      setLoadingId(null)
+    }
   }
 
-  // Totals for current filter
-  const totalIncome = filtered
-    .filter((t) => t.type === "INCOME")
+  // Totals for current filtered set (excluding canceled from standard expense/income if needed)
+  const totalIncome = filteredAndSorted
+    .filter((t) => t.type === "INCOME" && t.status !== "CANCELED")
     .reduce((acc, t) => acc + t.amount, 0)
-  const totalExpense = filtered
-    .filter((t) => t.type === "EXPENSE")
+  const totalExpense = filteredAndSorted
+    .filter((t) => t.type === "EXPENSE" && t.status !== "CANCELED")
     .reduce((acc, t) => acc + t.amount, 0)
 
   return (
@@ -118,105 +236,154 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
       </div>
 
       {/* Filters & Search Toolbar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        {/* Search */}
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-zinc-500" />
-          <Input
-            type="text"
-            placeholder="Buscar por descrição ou categoria..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-[#121215] border-zinc-800 text-xs h-9 focus-visible:ring-1 focus-visible:ring-zinc-400 text-zinc-200"
-          />
-        </div>
-
-        {/* Type Filter Buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center bg-zinc-900 border border-zinc-800 p-0.5 rounded-lg text-xs">
-            <button
-              onClick={() => setTypeFilter("ALL")}
-              className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 ${
-                typeFilter === "ALL"
-                  ? "bg-zinc-800 text-white font-semibold"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              <Filter className="w-3 h-3 shrink-0" />
-              <span>Todas</span>
-            </button>
-            <button
-              onClick={() => setTypeFilter("INCOME")}
-              className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 ${
-                typeFilter === "INCOME"
-                  ? "bg-[#10b981]/20 text-[#10b981] font-semibold border border-[#10b981]/30"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              <ArrowUpRight className="w-3 h-3 shrink-0" />
-              <span>Entradas</span>
-            </button>
-            <button
-              onClick={() => setTypeFilter("EXPENSE")}
-              className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 ${
-                typeFilter === "EXPENSE"
-                  ? "bg-[#ef4444]/20 text-[#ef4444] font-semibold border border-[#ef4444]/30"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              <ArrowDownLeft className="w-3 h-3 shrink-0" />
-              <span>Despesas</span>
-            </button>
+      <div className="space-y-3">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          {/* Search */}
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-zinc-500" />
+            <Input
+              type="text"
+              placeholder="Buscar por descrição ou categoria..."
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-9 bg-[#121215] border-zinc-800 text-xs h-9 focus-visible:ring-1 focus-visible:ring-zinc-400 text-zinc-200"
+            />
           </div>
 
-          {/* Recurrence Mode */}
-          <div className="flex items-center bg-zinc-900 border border-zinc-800 p-0.5 rounded-lg text-xs">
-            <button
-              onClick={() => setRecurrenceFilter("ALL")}
-              className={`px-2.5 py-1.5 rounded-md font-medium flex items-center gap-1.5 ${
-                recurrenceFilter === "ALL" ? "bg-zinc-800 text-white" : "text-zinc-400"
-              }`}
+          {/* Type Filter Buttons */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center bg-zinc-900 border border-zinc-800 p-0.5 rounded-lg text-xs">
+              <button
+                onClick={() => handleTypeChange("ALL")}
+                className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 ${
+                  typeFilter === "ALL"
+                    ? "bg-zinc-800 text-white font-semibold"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                <Filter className="w-3 h-3 shrink-0" />
+                <span>Todas</span>
+              </button>
+              <button
+                onClick={() => handleTypeChange("INCOME")}
+                className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 ${
+                  typeFilter === "INCOME"
+                    ? "bg-[#10b981]/20 text-[#10b981] font-semibold border border-[#10b981]/30"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                <ArrowUpRight className="w-3 h-3 shrink-0" />
+                <span>Entradas</span>
+              </button>
+              <button
+                onClick={() => handleTypeChange("EXPENSE")}
+                className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 ${
+                  typeFilter === "EXPENSE"
+                    ? "bg-[#ef4444]/20 text-[#ef4444] font-semibold border border-[#ef4444]/30"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                <ArrowDownLeft className="w-3 h-3 shrink-0" />
+                <span>Despesas</span>
+              </button>
+            </div>
+
+            {/* Recurrence Mode */}
+            <div className="flex items-center bg-zinc-900 border border-zinc-800 p-0.5 rounded-lg text-xs">
+              <button
+                onClick={() => handleRecurrenceChange("ALL")}
+                className={`px-2.5 py-1.5 rounded-md font-medium flex items-center gap-1.5 ${
+                  recurrenceFilter === "ALL" ? "bg-zinc-800 text-white font-semibold" : "text-zinc-400"
+                }`}
+              >
+                <Layers className="w-3 h-3 shrink-0" />
+                <span>Tudo</span>
+              </button>
+              <button
+                onClick={() => handleRecurrenceChange("RECURRING")}
+                className={`px-2.5 py-1.5 rounded-md font-medium flex items-center gap-1.5 ${
+                  recurrenceFilter === "RECURRING"
+                    ? "bg-[#3b82f6]/20 text-[#3b82f6] font-semibold border border-[#3b82f6]/30"
+                    : "text-zinc-400"
+                }`}
+              >
+                <Repeat className="w-3 h-3 shrink-0" />
+                <span>Recorrentes</span>
+              </button>
+              <button
+                onClick={() => handleRecurrenceChange("ONEOFF")}
+                className={`px-2.5 py-1.5 rounded-md font-medium flex items-center gap-1.5 ${
+                  recurrenceFilter === "ONEOFF" ? "bg-zinc-800 text-white font-semibold" : "text-zinc-400"
+                }`}
+              >
+                <Calendar className="w-3 h-3 shrink-0" />
+                <span>Avulsas</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Second Toolbar: Status filter + Sorting Selector */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
+          {/* Status Filter */}
+          <div className="flex items-center gap-1.5 flex-wrap text-xs">
+            <span className="text-[11px] font-mono text-zinc-500 mr-1 flex items-center gap-1">
+              <SlidersHorizontal className="w-3 h-3" /> Status:
+            </span>
+            {(
+              [
+                { id: "ALL", label: "Todos" },
+                { id: "COMPLETED", label: "Efetivados" },
+                { id: "PENDING", label: "Pendentes" },
+                { id: "CANCELED", label: "Cancelados" },
+              ] as const
+            ).map((s) => (
+              <button
+                key={s.id}
+                onClick={() => handleStatusChange(s.id)}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                  statusFilter === s.id
+                    ? "bg-zinc-800 text-white font-semibold border border-zinc-700"
+                    : "text-zinc-400 hover:text-zinc-200 bg-zinc-900/60 border border-zinc-800/80"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Sort Selector: Default is DATE_DESC (Mais Recentes) */}
+          <div className="flex items-center gap-1.5 text-xs self-end sm:self-auto">
+            <span className="text-[11px] font-mono text-zinc-500 flex items-center gap-1">
+              <ArrowUpDown className="w-3 h-3" /> Ordem:
+            </span>
+            <select
+              value={sortBy}
+              onChange={(e) => handleSortChange(e.target.value as SortOption)}
+              className="bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-md px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400"
             >
-              <Layers className="w-3 h-3 shrink-0" />
-              <span>Tudo</span>
-            </button>
-            <button
-              onClick={() => setRecurrenceFilter("RECURRING")}
-              className={`px-2.5 py-1.5 rounded-md font-medium flex items-center gap-1.5 ${
-                recurrenceFilter === "RECURRING"
-                  ? "bg-[#3b82f6]/20 text-[#3b82f6] font-semibold border border-[#3b82f6]/30"
-                  : "text-zinc-400"
-              }`}
-            >
-              <Repeat className="w-3 h-3 shrink-0" />
-              <span>Recorrentes</span>
-            </button>
-            <button
-              onClick={() => setRecurrenceFilter("ONEOFF")}
-              className={`px-2.5 py-1.5 rounded-md font-medium flex items-center gap-1.5 ${
-                recurrenceFilter === "ONEOFF" ? "bg-zinc-800 text-white font-semibold" : "text-zinc-400"
-              }`}
-            >
-              <Calendar className="w-3 h-3 shrink-0" />
-              <span>Avulsas</span>
-            </button>
+              <option value="DATE_DESC">Mais Recentes primeiro (Padrão)</option>
+              <option value="DATE_ASC">Mais Antigas primeiro</option>
+              <option value="AMOUNT_DESC">Maior Valor</option>
+              <option value="AMOUNT_ASC">Menor Valor</option>
+            </select>
           </div>
         </div>
       </div>
 
       {/* Summary Bar of current filter */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-zinc-900/40 border border-zinc-800/60 rounded-lg text-xs font-mono">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 bg-zinc-900/40 border border-zinc-800/60 rounded-lg text-xs font-mono">
         <span className="text-zinc-400">
-          Exibindo <strong className="text-white">{filtered.length}</strong> transações
+          Total encontrado: <strong className="text-white">{filteredAndSorted.length}</strong> lançamentos
         </span>
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-3 sm:space-x-4 flex-wrap">
           <span className="text-[#10b981]">
             Entradas: <strong>+{formatBRL(totalIncome)}</strong>
           </span>
           <span className="text-[#ef4444]">
             Despesas: <strong>-{formatBRL(totalExpense)}</strong>
           </span>
-          <span className="text-zinc-300 border-l border-zinc-800 pl-4">
+          <span className="text-zinc-300 border-l border-zinc-800 pl-3 sm:pl-4">
             Balanço:{" "}
             <strong className={totalIncome - totalExpense >= 0 ? "text-zinc-100" : "text-[#ef4444]"}>
               {formatBRL(totalIncome - totalExpense)}
@@ -227,39 +394,46 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
 
       {/* Mobile Transactions Card List (Always visible edit & delete icons) */}
       <div className="block md:hidden space-y-3">
-        {filtered.length === 0 ? (
+        {paginatedTransactions.length === 0 ? (
           <div className="bg-[#121215] border border-zinc-800 rounded-xl p-8 text-center text-zinc-500 font-mono text-xs">
             Nenhuma transação encontrada com os filtros selecionados.
           </div>
         ) : (
-          filtered.map((t) => {
+          paginatedTransactions.map((t) => {
             const isIncome = t.type === "INCOME"
             const isPending = t.status === "PENDING"
+            const isCanceled = t.status === "CANCELED"
             const config = getPaymentMethodConfig(t.paymentMethod)
 
             return (
               <div
                 key={t.id}
-                className="bg-[#121215] border border-zinc-800/80 rounded-xl p-3.5 space-y-3 shadow-xs"
+                className={`bg-[#121215] border rounded-xl p-3.5 space-y-3 shadow-xs ${
+                  isCanceled ? "border-zinc-800/40 opacity-70" : "border-zinc-800/80"
+                }`}
               >
                 {/* Top Row: Icon, Description & Amount */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start space-x-2.5 min-w-0 flex-1">
                     <div
                       className={`w-7 h-7 rounded flex items-center justify-center shrink-0 mt-0.5 ${
-                        isIncome
+                        isCanceled
+                          ? "bg-zinc-800 text-zinc-500"
+                          : isIncome
                           ? "bg-[#10b981]/15 text-[#10b981]"
                           : "bg-[#ef4444]/15 text-[#ef4444]"
                       }`}
                     >
-                      {isIncome ? (
+                      {isCanceled ? (
+                        <Ban className="w-3.5 h-3.5" />
+                      ) : isIncome ? (
                         <ArrowUpRight className="w-3.5 h-3.5" />
                       ) : (
                         <ArrowDownLeft className="w-3.5 h-3.5" />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <span className="font-semibold text-zinc-100 text-xs block truncate">
+                      <span className={`font-semibold text-xs block truncate ${isCanceled ? "line-through text-zinc-400" : "text-zinc-100"}`}>
                         {t.description}
                       </span>
                       <div className="flex items-center gap-1.5 flex-wrap mt-1">
@@ -300,7 +474,11 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
                   <div className="text-right shrink-0">
                     <div
                       className={`text-xs font-mono font-bold ${
-                        isIncome ? "text-[#10b981]" : "text-[#ef4444]"
+                        isCanceled
+                          ? "text-zinc-500 line-through"
+                          : isIncome
+                          ? "text-[#10b981]"
+                          : "text-[#ef4444]"
                       }`}
                     >
                       {isIncome ? "+" : "-"}
@@ -312,31 +490,51 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
                   </div>
                 </div>
 
-                {/* Bottom Row: Status Toggle & ALWAYS VISIBLE Edit / Delete Buttons */}
-                <div className="flex items-center justify-between pt-2 border-t border-zinc-800/60">
-                  <button
-                    onClick={() => handleToggle(t.id)}
-                    disabled={loadingId === t.id}
-                    className={`px-2 py-1 rounded-full text-[10px] font-semibold border transition-all flex items-center gap-1 ${
-                      isPending
-                        ? "bg-[#f59e0b]/15 text-[#f59e0b] border-[#f59e0b]/30 hover:bg-[#f59e0b]/25"
-                        : "bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white"
-                    }`}
-                  >
-                    {isPending ? (
-                      <>
-                        <Clock className="w-2.5 h-2.5" />
-                        Pendente
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-2.5 h-2.5 text-[#10b981]" />
-                        Efetivado
-                      </>
-                    )}
-                  </button>
+                {/* Bottom Row: Status Toggle & ALWAYS VISIBLE Edit / Delete / Cancel Buttons */}
+                <div className="flex items-center justify-between pt-2 border-t border-zinc-800/60 gap-2 flex-wrap">
+                  {isCanceled ? (
+                    <span className="px-2 py-1 rounded-full text-[10px] font-semibold border bg-zinc-900 border-zinc-800 text-zinc-400 flex items-center gap-1 font-mono">
+                      <Ban className="w-2.5 h-2.5 text-zinc-500" />
+                      Cancelada
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleToggle(t.id)}
+                      disabled={loadingId === t.id}
+                      className={`px-2 py-1 rounded-full text-[10px] font-semibold border transition-all flex items-center gap-1 ${
+                        isPending
+                          ? "bg-[#f59e0b]/15 text-[#f59e0b] border-[#f59e0b]/30 hover:bg-[#f59e0b]/25"
+                          : "bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white"
+                      }`}
+                    >
+                      {isPending ? (
+                        <>
+                          <Clock className="w-2.5 h-2.5" />
+                          Pendente
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-2.5 h-2.5 text-[#10b981]" />
+                          Efetivado
+                        </>
+                      )}
+                    </button>
+                  )}
 
                   <div className="flex items-center space-x-1">
+                    {t.isRecurring && !isCanceled && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleCancelRecurring(t)}
+                        disabled={loadingId === t.id}
+                        className="h-7 px-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-950/30 flex items-center gap-1 rounded-md"
+                        title="Cancelar Recorrência"
+                      >
+                        <Ban className="w-3.5 h-3.5" />
+                        <span className="text-[11px]">Cancelar</span>
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"
@@ -350,7 +548,7 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => handleDelete(t.id)}
+                      onClick={() => handleDelete(t.id, t.description)}
                       disabled={loadingId === t.id}
                       className="h-7 px-2 text-xs text-zinc-400 hover:text-[#ef4444] hover:bg-[#ef4444]/10 flex items-center gap-1 rounded-md"
                       title="Excluir Lançamento"
@@ -383,39 +581,46 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/60">
-              {filtered.length === 0 ? (
+              {paginatedTransactions.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-zinc-500 font-mono text-xs">
                     Nenhuma transação encontrada com os filtros selecionados.
                   </td>
                 </tr>
               ) : (
-                filtered.map((t) => {
+                paginatedTransactions.map((t) => {
                   const isIncome = t.type === "INCOME"
                   const isPending = t.status === "PENDING"
+                  const isCanceled = t.status === "CANCELED"
 
                   return (
                     <tr
                       key={t.id}
-                      className="hover:bg-zinc-900/40 transition-colors group"
+                      className={`hover:bg-zinc-900/40 transition-colors group ${
+                        isCanceled ? "opacity-60 bg-zinc-950/20" : ""
+                      }`}
                     >
                       <td className="py-3 px-4">
                         <div className="flex items-center space-x-2.5">
                           <div
-                            className={`w-6 h-6 rounded flex items-center justify-center ${
-                              isIncome
+                            className={`w-6 h-6 rounded flex items-center justify-center shrink-0 ${
+                              isCanceled
+                                ? "bg-zinc-800 text-zinc-500"
+                                : isIncome
                                 ? "bg-[#10b981]/15 text-[#10b981]"
                                 : "bg-[#ef4444]/15 text-[#ef4444]"
                             }`}
                           >
-                            {isIncome ? (
+                            {isCanceled ? (
+                              <Ban className="w-3.5 h-3.5" />
+                            ) : isIncome ? (
                               <ArrowUpRight className="w-3.5 h-3.5" />
                             ) : (
                               <ArrowDownLeft className="w-3.5 h-3.5" />
                             )}
                           </div>
                           <div>
-                            <span className="font-medium text-zinc-100 block">
+                            <span className={`font-medium block ${isCanceled ? "line-through text-zinc-400" : "text-zinc-100"}`}>
                               {t.description}
                             </span>
                             {t.source === "WHATSAPP" && (
@@ -471,31 +676,38 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
                       </td>
 
                       <td className="py-3 px-4">
-                        <button
-                          onClick={() => handleToggle(t.id)}
-                          disabled={loadingId === t.id}
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all flex items-center gap-1 ${
-                            isPending
-                              ? "bg-[#f59e0b]/15 text-[#f59e0b] border-[#f59e0b]/30 hover:bg-[#f59e0b]/25"
-                              : "bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white"
-                          }`}
-                        >
-                          {isPending ? (
-                            <>
-                              <Clock className="w-2.5 h-2.5" />
-                              Pendente
-                            </>
-                          ) : (
-                            <>
-                              <Check className="w-2.5 h-2.5 text-[#10b981]" />
-                              Efetivado
-                            </>
-                          )}
-                        </button>
+                        {isCanceled ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-zinc-900 border-zinc-800 text-zinc-400 flex items-center gap-1 font-mono w-max">
+                            <Ban className="w-2.5 h-2.5 text-zinc-500" />
+                            Cancelada
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleToggle(t.id)}
+                            disabled={loadingId === t.id}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all flex items-center gap-1 ${
+                              isPending
+                                ? "bg-[#f59e0b]/15 text-[#f59e0b] border-[#f59e0b]/30 hover:bg-[#f59e0b]/25"
+                                : "bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white"
+                            }`}
+                          >
+                            {isPending ? (
+                              <>
+                                <Clock className="w-2.5 h-2.5" />
+                                Pendente
+                              </>
+                            ) : (
+                              <>
+                                <Check className="w-2.5 h-2.5 text-[#10b981]" />
+                                Efetivado
+                              </>
+                            )}
+                          </button>
+                        )}
                       </td>
 
                       <td className="py-3 px-4 text-right font-mono font-bold">
-                        <span className={isIncome ? "text-[#10b981]" : "text-[#ef4444]"}>
+                        <span className={isCanceled ? "text-zinc-500 line-through" : isIncome ? "text-[#10b981]" : "text-[#ef4444]"}>
                           {isIncome ? "+" : "-"}
                           {formatBRL(t.amount)}
                         </span>
@@ -503,6 +715,18 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
 
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end space-x-1 opacity-100 transition-opacity">
+                          {t.isRecurring && !isCanceled && (
+                            <Button
+                              size="icon-xs"
+                              variant="ghost"
+                              onClick={() => handleCancelRecurring(t)}
+                              disabled={loadingId === t.id}
+                              className="text-red-400 hover:text-red-300 hover:bg-red-950/30"
+                              title="Cancelar Recorrência Futura"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                           <Button
                             size="icon-xs"
                             variant="ghost"
@@ -515,7 +739,7 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
                           <Button
                             size="icon-xs"
                             variant="ghost"
-                            onClick={() => handleDelete(t.id)}
+                            onClick={() => handleDelete(t.id, t.description)}
                             disabled={loadingId === t.id}
                             className="text-zinc-500 hover:text-[#ef4444]"
                             title="Excluir Lançamento"
@@ -532,6 +756,86 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
           </table>
         </div>
       </div>
+
+      {/* Pagination Controls Bar */}
+      {totalItems > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs">
+          <div className="flex items-center gap-3 text-zinc-400 font-mono text-[11px] sm:text-xs">
+            <span>
+              Mostrando <strong className="text-zinc-200">{(safePage - 1) * itemsPerPage + 1}</strong> a{" "}
+              <strong className="text-zinc-200">{Math.min(safePage * itemsPerPage, totalItems)}</strong> de{" "}
+              <strong className="text-zinc-200">{totalItems}</strong>
+            </span>
+            <div className="flex items-center gap-1.5 ml-2">
+              <span className="text-[11px] text-zinc-500">Exibir:</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value))
+                  setCurrentPage(1)
+                }}
+                className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400"
+              >
+                <option value={10}>10</option>
+                <option value={15}>15</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-1.5 font-mono">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(1)}
+              disabled={safePage === 1}
+              className="h-7 w-7 p-0 bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 disabled:opacity-30"
+              title="Primeira página"
+            >
+              <ChevronsLeft className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safePage === 1}
+              className="h-7 w-7 p-0 bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 disabled:opacity-30"
+              title="Página anterior"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </Button>
+
+            <div className="flex items-center px-2 text-xs text-zinc-400">
+              <span>
+                Pág. <strong className="text-zinc-100">{safePage}</strong> de{" "}
+                <strong className="text-zinc-100">{totalPages}</strong>
+              </span>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage === totalPages}
+              className="h-7 w-7 p-0 bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 disabled:opacity-30"
+              title="Próxima página"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={safePage === totalPages}
+              className="h-7 w-7 p-0 bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 disabled:opacity-30"
+              title="Última página"
+            >
+              <ChevronsRight className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       <QuickAddDialog
         open={quickAddOpen}

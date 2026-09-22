@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { updateTransactionAction, getCategoriesAction } from "@/actions/finance-actions"
+import { updateTransactionAction, getCategoriesAction, cancelRecurringTransactionAction } from "@/actions/finance-actions"
 import { PAYMENT_METHODS } from "@/lib/payment-methods"
-import { ArrowDownLeft, ArrowUpRight, Calendar, Check, CreditCard, Loader2, Repeat } from "lucide-react"
+import { ArrowDownLeft, ArrowUpRight, Calendar, Check, CreditCard, Loader2, Repeat, Ban } from "lucide-react"
 
 interface EditTransactionDialogProps {
   transaction: any | null
@@ -100,14 +100,43 @@ export function EditTransactionDialog({
     }
   }
 
+  const [cancelLoading, setCancelLoading] = useState(false)
+
+  const handleCancelRecurring = async () => {
+    if (!transaction?.id) return
+    if (!confirm("Deseja realmente cancelar esta recorrência e todos os lançamentos futuros dela?")) return
+    setCancelLoading(true)
+    try {
+      const res = await cancelRecurringTransactionAction(transaction.id)
+      if (res.success) {
+        setStatus("CANCELED")
+        if (onSuccess) {
+          onSuccess({ ...transaction, status: "CANCELED" })
+        }
+        onOpenChange(false)
+      }
+    } catch (err) {
+      console.error("Failed to cancel recurring transaction", err)
+    } finally {
+      setCancelLoading(false)
+    }
+  }
+
   const availableCategories = categories.filter((c) => c.type === type)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#121215] border border-zinc-800 text-zinc-100 sm:max-w-[440px] p-6 shadow-2xl">
+      <DialogContent className="bg-[#121215] border border-zinc-800 text-zinc-100 sm:max-w-[460px] p-6 shadow-2xl">
         <DialogHeader className="space-y-1">
-          <DialogTitle className="text-base font-semibold tracking-tight text-white flex items-center gap-2">
-            <span>Editar Lançamento</span>
+          <DialogTitle className="text-base font-semibold tracking-tight text-white flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              Editar Lançamento
+              {status === "CANCELED" && (
+                <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+                  Cancelada
+                </span>
+              )}
+            </span>
           </DialogTitle>
           <DialogDescription className="text-xs text-zinc-400">
             Altere os detalhes da transação financeira.
@@ -227,7 +256,7 @@ export function EditTransactionDialog({
           </div>
 
           {/* Recurrence & Status */}
-          <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between">
+          <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between flex-wrap gap-2">
             <button
               type="button"
               onClick={() => setIsRecurring(!isRecurring)}
@@ -243,17 +272,68 @@ export function EditTransactionDialog({
 
             <button
               type="button"
-              onClick={() => setStatus(status === "COMPLETED" ? "PENDING" : "COMPLETED")}
+              onClick={() => {
+                if (status === "COMPLETED") setStatus("PENDING")
+                else if (status === "PENDING") setStatus("COMPLETED")
+                else setStatus("COMPLETED")
+              }}
               className={`flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-all ${
                 status === "COMPLETED"
                   ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-400"
+                  : status === "CANCELED"
+                  ? "border-zinc-700 bg-zinc-900 text-zinc-400"
                   : "border-amber-500/40 bg-amber-950/20 text-amber-400"
               }`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${status === "COMPLETED" ? "bg-emerald-400" : "bg-amber-400"}`} />
-              <span>{status === "COMPLETED" ? "Efetivado" : "Pendente"}</span>
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  status === "COMPLETED"
+                    ? "bg-emerald-400"
+                    : status === "CANCELED"
+                    ? "bg-zinc-500"
+                    : "bg-amber-400"
+                }`}
+              />
+              <span>
+                {status === "COMPLETED"
+                  ? "Efetivado"
+                  : status === "CANCELED"
+                  ? "Cancelada"
+                  : "Pendente"}
+              </span>
             </button>
           </div>
+
+          {/* Recurring Cancel Alert / Action */}
+          {transaction?.isRecurring && status !== "CANCELED" && (
+            <div className="flex items-center justify-between p-2.5 rounded-lg border border-red-950/60 bg-red-950/15">
+              <div className="text-[11px] text-zinc-400">
+                Lançamento recorrente ativo no sistema.
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCancelRecurring}
+                disabled={cancelLoading}
+                className="h-7 text-xs border-red-900/50 bg-red-950/40 text-red-300 hover:bg-red-900/50 hover:text-white gap-1 px-2.5"
+              >
+                {cancelLoading ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Ban className="w-3 h-3 text-red-400" />
+                )}
+                <span>Cancelar Recorrência</span>
+              </Button>
+            </div>
+          )}
+
+          {status === "CANCELED" && (
+            <div className="p-2.5 rounded-lg border border-zinc-800 bg-zinc-900/60 text-[11px] text-zinc-400 flex items-center gap-2">
+              <Ban className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+              <span>Esta recorrência foi cancelada e não afetará faturas ou projeções futuras.</span>
+            </div>
+          )}
 
           {/* Submit */}
           <div className="flex items-center justify-end space-x-2 pt-2">

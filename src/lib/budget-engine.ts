@@ -69,12 +69,15 @@ export async function getFinancialData(
   // Cutoff date for expenses/incomes up to that day
   const cutoffDate = new Date(startDate.getTime() + (effectiveCutoff - 1) * 24 * 60 * 60 * 1000 + 23 * 3600000 + 59 * 60000 + 59000)
 
-  // Fetch transactions for the cycle
+  // Fetch transactions for the cycle (excluding canceled ones)
   const transactions = await db.transaction.findMany({
     where: {
       dueDate: {
         gte: startDate,
         lte: endDate,
+      },
+      status: {
+        not: "CANCELED",
       },
     },
     include: {

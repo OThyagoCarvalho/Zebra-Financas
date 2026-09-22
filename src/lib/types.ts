@@ -1,5 +1,5 @@
 export type TransactionType = "INCOME" | "EXPENSE"
-export type TransactionStatus = "PENDING" | "COMPLETED"
+export type TransactionStatus = "PENDING" | "COMPLETED" | "CANCELED"
 export type RecurrenceRule = "MONTHLY" | "WEEKLY" | "YEARLY"
 export type AccentColor = "green" | "red" | "yellow" | "blue"
 

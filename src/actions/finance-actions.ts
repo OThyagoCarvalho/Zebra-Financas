@@ -55,7 +55,58 @@ export async function createTransactionAction(formData: {
     ? Math.min(48, Math.max(1, Math.round(formData.installments)))
     : 1
 
-  // Handle multiple installments for credit card purchases
+  // 1. Handle Recurring Transactions (e.g. Subscriptions, Streaming, Gym, Rent - credit cards or any method)
+  if (formData.isRecurring) {
+    const groupId = `rec_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+    const [yearStr, monthStr, dayStr] = formData.dueDate.split("-").map(Number)
+    const baseYear = !isNaN(yearStr) ? yearStr : new Date().getFullYear()
+    const baseMonth = !isNaN(monthStr) ? monthStr : new Date().getMonth() + 1
+    const baseDay = !isNaN(dayStr) ? dayStr : new Date().getDate()
+
+    const createdTransactions = []
+    const projectionMonths = 12 // Project forward for 12 months until canceled
+
+    for (let i = 1; i <= projectionMonths; i++) {
+      const monthOffset = baseMonth - 1 + (i - 1)
+      const targetYear = baseYear + Math.floor(monthOffset / 12)
+      const targetMonth = (monthOffset % 12) + 1
+      const daysInTargetMonth = new Date(targetYear, targetMonth, 0).getDate()
+      const clampedDay = Math.min(baseDay, daysInTargetMonth)
+
+      const targetDueDate = new Date(Date.UTC(targetYear, targetMonth - 1, clampedDay, 12, 0, 0))
+      const isFirst = i === 1
+      const instStatus = isFirst ? formData.status || "COMPLETED" : "PENDING"
+      const instPaidAt = isFirst && instStatus === "COMPLETED" ? targetDueDate : null
+
+      const created = await db.transaction.create({
+        data: {
+          description: formData.description.trim(),
+          amount: Number(formData.amount),
+          type: formData.type,
+          isRecurring: true,
+          recurrenceRule: formData.recurrenceRule || "MONTHLY",
+          categoryId: formData.categoryId,
+          dueDate: targetDueDate,
+          paidAt: instPaidAt,
+          status: instStatus,
+          paymentMethod: method,
+          source: isFirst ? "MANUAL" : "RECURRING",
+          installmentNumber: i,
+          totalInstallments: null,
+          installmentGroupId: groupId,
+        },
+      })
+      createdTransactions.push(created)
+    }
+
+    revalidatePath("/")
+    revalidatePath("/transactions")
+    revalidatePath("/budgets")
+    revalidatePath("/cards")
+    return { success: true, transactions: createdTransactions, transaction: createdTransactions[0] }
+  }
+
+  // 2. Handle multiple finite installments for credit card purchases (non-recurring)
   if (installments > 1 && formData.type === "EXPENSE" && isCreditCard(method)) {
     const totalAmount = Math.round(Number(formData.amount) * 100) / 100
     const baseInstAmount = Math.floor((totalAmount / installments) * 100) / 100
@@ -287,7 +338,7 @@ export async function getCardInvoicesAction(year: number, month: number) {
   }
 
   for (const t of currentCycleTransactions) {
-    if (!isCreditCard(t.paymentMethod)) continue
+    if (!isCreditCard(t.paymentMethod) || t.status === "CANCELED") continue
     const cardId = t.paymentMethod || "CREDIT_CARD"
     if (!cardsSummary[cardId]) {
       cardsSummary[cardId] = {
@@ -335,6 +386,7 @@ export async function getCardInvoicesAction(year: number, month: number) {
     const pTransactions = await db.transaction.findMany({
       where: {
         type: "EXPENSE",
+        status: { not: "CANCELED" },
         dueDate: {
           gte: pRange.startDate,
           lte: pRange.endDate,
@@ -411,6 +463,44 @@ export async function toggleTransactionStatusAction(id: string) {
 
   revalidatePath("/")
   revalidatePath("/transactions")
+  revalidatePath("/cards")
+  return { success: true, transaction: updated }
+}
+
+export async function cancelRecurringTransactionAction(id: string) {
+  const current = await db.transaction.findUnique({
+    where: { id },
+  })
+
+  if (!current) return { success: false, error: "Transação não encontrada" }
+
+  // If part of a recurring group, cancel all current & future uncompleted instances
+  if (current.installmentGroupId && current.installmentGroupId.startsWith("rec_")) {
+    await db.transaction.updateMany({
+      where: {
+        installmentGroupId: current.installmentGroupId,
+        dueDate: { gte: current.dueDate },
+        status: { not: "COMPLETED" },
+      },
+      data: {
+        status: "CANCELED",
+      },
+    })
+  }
+
+  // Also update this specific transaction
+  const updated = await db.transaction.update({
+    where: { id },
+    data: {
+      status: current.status === "COMPLETED" ? "COMPLETED" : "CANCELED",
+      isRecurring: false,
+    },
+  })
+
+  revalidatePath("/")
+  revalidatePath("/transactions")
+  revalidatePath("/budgets")
+  revalidatePath("/cards")
   return { success: true, transaction: updated }
 }
 

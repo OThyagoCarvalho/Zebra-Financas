@@ -198,8 +198,57 @@ export function QuickAddDialog({ open, onOpenChange, onSuccess }: QuickAddDialog
             </div>
           </div>
 
-          {/* Installments for Credit Cards */}
-          {isCreditCard(paymentMethod) && type === "EXPENSE" && (
+          {/* Recurrence Toggle */}
+          <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-start space-x-2.5 min-w-0 flex-1">
+                <Repeat className={`w-4 h-4 mt-0.5 shrink-0 ${isRecurring ? "text-blue-400" : "text-zinc-500"}`} />
+                <div className="min-w-0">
+                  <div
+                    onClick={() => {
+                      const next = !isRecurring
+                      setIsRecurring(next)
+                      if (next) setInstallments(1)
+                    }}
+                    className="text-xs font-semibold text-zinc-200 cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span>Lançamento Recorrente Mensal</span>
+                    {isRecurring && (
+                      <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-blue-950/60 text-blue-400 border border-blue-800/60">
+                        Ativo
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    {isCreditCard(paymentMethod)
+                      ? "Cobrança mensal na fatura deste cartão (ex: Netflix, streaming, academia) projetada nos próximos meses até cancelamento."
+                      : "Repete todo mês automaticamente no orçamento (ex: aluguel, salário, assinatura)."}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !isRecurring
+                  setIsRecurring(next)
+                  if (next) setInstallments(1)
+                }}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  isRecurring ? "bg-blue-600" : "bg-zinc-700"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                    isRecurring ? "translate-x-4" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Installments for Credit Cards (shown when not a recurring subscription) */}
+          {isCreditCard(paymentMethod) && type === "EXPENSE" && !isRecurring && (
             <div className="p-3 rounded-lg bg-zinc-900/80 border border-zinc-800 space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
