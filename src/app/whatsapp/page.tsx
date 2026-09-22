@@ -1,11 +1,5 @@
-import { getWhatsAppConfigAction, getWhatsAppLogsAction } from "@/actions/finance-actions"
-import { WhatsAppHub } from "@/components/whatsapp/whatsapp-hub"
+import { redirect } from "next/navigation"
 
-export const dynamic = "force-dynamic"
-
-export default async function WhatsAppPage() {
-  const config = await getWhatsAppConfigAction()
-  const logs = await getWhatsAppLogsAction()
-
-  return <WhatsAppHub initialConfig={config} initialLogs={logs} />
+export default function WhatsAppPage() {
+  redirect("/")
 }

@@ -48,6 +48,45 @@ export async function createTransactionAction(formData: {
   return { success: true, transaction }
 }
 
+export async function updateTransactionAction(
+  id: string,
+  formData: {
+    description: string
+    amount: number
+    type: "INCOME" | "EXPENSE"
+    isRecurring: boolean
+    recurrenceRule?: string
+    categoryId: string
+    dueDate: string // YYYY-MM-DD
+    paymentMethod?: string
+    status?: string
+  }
+) {
+  const transaction = await db.transaction.update({
+    where: { id },
+    data: {
+      description: formData.description.trim(),
+      amount: Number(formData.amount),
+      type: formData.type,
+      isRecurring: formData.isRecurring,
+      recurrenceRule: formData.isRecurring ? formData.recurrenceRule || "MONTHLY" : null,
+      categoryId: formData.categoryId,
+      dueDate: new Date(formData.dueDate),
+      paidAt: formData.status === "COMPLETED" ? new Date(formData.dueDate) : null,
+      status: formData.status || "COMPLETED",
+      paymentMethod: formData.paymentMethod || "PIX",
+    },
+    include: {
+      category: true,
+    },
+  })
+
+  revalidatePath("/")
+  revalidatePath("/transactions")
+  revalidatePath("/budgets")
+  return { success: true, transaction }
+}
+
 export async function deleteTransactionAction(id: string) {
   await db.transaction.delete({
     where: { id },

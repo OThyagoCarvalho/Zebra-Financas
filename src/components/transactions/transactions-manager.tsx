@@ -1,10 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowDownLeft, ArrowUpRight, Calendar, Check, Clock, Filter, Plus, Repeat, Search, Trash2 } from "lucide-react"
+import { ArrowDownLeft, ArrowUpRight, Calendar, Check, Clock, Edit3, Filter, Plus, Repeat, Search, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { QuickAddDialog } from "@/components/transactions/quick-add-dialog"
+import { EditTransactionDialog } from "@/components/transactions/edit-transaction-dialog"
 import { deleteTransactionAction, toggleTransactionStatusAction } from "@/actions/finance-actions"
 import { useRouter } from "next/navigation"
 
@@ -16,6 +17,7 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
   const router = useRouter()
   const [transactions, setTransactions] = useState(initialTransactions)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [editingTransaction, setEditingTransaction] = useState<any | null>(null)
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<"ALL" | "INCOME" | "EXPENSE">("ALL")
   const [recurrenceFilter, setRecurrenceFilter] = useState<"ALL" | "RECURRING" | "ONEOFF">("ALL")
@@ -318,15 +320,27 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
                       </td>
 
                       <td className="py-3 px-4 text-right">
-                        <Button
-                          size="icon-xs"
-                          variant="ghost"
-                          onClick={() => handleDelete(t.id)}
-                          disabled={loadingId === t.id}
-                          className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-[#ef4444] transition-opacity"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                        <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            size="icon-xs"
+                            variant="ghost"
+                            onClick={() => setEditingTransaction(t)}
+                            className="text-zinc-400 hover:text-white"
+                            title="Editar Lançamento"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            size="icon-xs"
+                            variant="ghost"
+                            onClick={() => handleDelete(t.id)}
+                            disabled={loadingId === t.id}
+                            className="text-zinc-500 hover:text-[#ef4444]"
+                            title="Excluir Lançamento"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -341,6 +355,18 @@ export function TransactionsManager({ initialTransactions }: TransactionsManager
         open={quickAddOpen}
         onOpenChange={setQuickAddOpen}
         onSuccess={() => router.refresh()}
+      />
+
+      <EditTransactionDialog
+        transaction={editingTransaction}
+        open={!!editingTransaction}
+        onOpenChange={(open) => !open && setEditingTransaction(null)}
+        onSuccess={(updated) => {
+          setTransactions((prev) =>
+            prev.map((t) => (t.id === updated.id ? updated : t))
+          )
+          router.refresh()
+        }}
       />
     </div>
   )

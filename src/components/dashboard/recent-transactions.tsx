@@ -1,10 +1,11 @@
 "use client"
 
-import { ArrowDownLeft, ArrowUpRight, MessageSquare, Repeat, Trash2, CheckCircle2, Clock } from "lucide-react"
+import { ArrowDownLeft, ArrowUpRight, MessageSquare, Repeat, Trash2, CheckCircle2, Clock, Edit3 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { deleteTransactionAction, toggleTransactionStatusAction } from "@/actions/finance-actions"
+import { EditTransactionDialog } from "@/components/transactions/edit-transaction-dialog"
 import { useState } from "react"
 
 interface RecentTransactionsProps {
@@ -14,6 +15,7 @@ interface RecentTransactionsProps {
 
 export function RecentTransactions({ transactions, onUpdate }: RecentTransactionsProps) {
   const [loadingId, setLoadingId] = useState<string | null>(null)
+  const [editingTransaction, setEditingTransaction] = useState<any | null>(null)
 
   const formatBRL = (val: number) => {
     return val.toLocaleString("pt-BR", {
@@ -152,6 +154,15 @@ export function RecentTransactions({ transactions, onUpdate }: RecentTransaction
                       <Button
                         size="icon-xs"
                         variant="ghost"
+                        onClick={() => setEditingTransaction(t)}
+                        className="text-zinc-400 hover:text-white"
+                        title="Editar"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        size="icon-xs"
+                        variant="ghost"
                         onClick={() => handleToggle(t.id)}
                         disabled={loadingId === t.id}
                         className="text-zinc-400 hover:text-white"
@@ -181,6 +192,15 @@ export function RecentTransactions({ transactions, onUpdate }: RecentTransaction
           </div>
         )}
       </CardContent>
+
+      <EditTransactionDialog
+        transaction={editingTransaction}
+        open={!!editingTransaction}
+        onOpenChange={(open) => !open && setEditingTransaction(null)}
+        onSuccess={() => {
+          if (onUpdate) onUpdate()
+        }}
+      />
     </Card>
   )
 }

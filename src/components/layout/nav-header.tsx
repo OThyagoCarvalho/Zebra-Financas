@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Plus, MessageSquareCode, Wallet, PieChart, ArrowLeftRight, LogOut } from "lucide-react"
+import { Plus, Wallet, PieChart, ArrowLeftRight, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { QuickAddDialog } from "@/components/transactions/quick-add-dialog"
@@ -22,7 +22,6 @@ export function NavHeader() {
     { label: "Visão Geral", href: "/", icon: Wallet },
     { label: "Transações", href: "/transactions", icon: ArrowLeftRight },
     { label: "Orçamentos", href: "/budgets", icon: PieChart },
-    { label: "WhatsApp Bot", href: "/whatsapp", icon: MessageSquareCode },
   ]
 
   const handleLogout = async () => {
@@ -79,14 +78,6 @@ export function NavHeader() {
 
           {/* Right Action: Quick Add Button & Logout */}
           <div className="flex items-center space-x-3">
-            <Link
-              href="/whatsapp"
-              className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-full border border-emerald-500/20 bg-emerald-950/20 text-emerald-400 text-[11px] font-mono hover:bg-emerald-950/40 transition-colors"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>WhatsApp Ativo</span>
-            </Link>
-
             <Button
               onClick={() => setQuickAddOpen(true)}
               size="sm"
