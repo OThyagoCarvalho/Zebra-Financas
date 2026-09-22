@@ -1,12 +1,33 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { cookies } from "next/headers"
 import { db } from "@/lib/db"
 import { parseFinancialMessage } from "@/lib/nlp-parser"
 import { getFinancialData } from "@/lib/budget-engine"
 
+export async function setCycleStartDayAction(day: number) {
+  const cookieStore = await cookies()
+  const validDay = Math.min(28, Math.max(1, Math.round(day || 1)))
+  cookieStore.set("zebra_cycle_start_day", String(validDay), {
+    maxAge: 60 * 60 * 24 * 365,
+    path: "/",
+  })
+  revalidatePath("/")
+  revalidatePath("/budgets")
+  revalidatePath("/transactions")
+  return { success: true, cycleStartDay: validDay }
+}
+
+export async function getCycleStartDayAction(): Promise<number> {
+  const cookieStore = await cookies()
+  const val = cookieStore.get("zebra_cycle_start_day")?.value
+  return val ? parseInt(val, 10) : 1
+}
+
 export async function getFinancialOverviewAction(year: number, month: number, cutoffDay?: number) {
-  return await getFinancialData(year, month, cutoffDay)
+  const cycleStartDay = await getCycleStartDayAction()
+  return await getFinancialData(year, month, cutoffDay, cycleStartDay)
 }
 
 export async function getCategoriesAction() {

@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createTransactionAction, getCategoriesAction } from "@/actions/finance-actions"
 import { ArrowDownLeft, ArrowUpRight, Calendar, Check, Loader2, Repeat } from "lucide-react"
@@ -188,33 +187,35 @@ export function QuickAddDialog({ open, onOpenChange, onSuccess }: QuickAddDialog
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs font-medium text-zinc-300">Categoria</Label>
-              <Select value={categoryId} onValueChange={(val) => setCategoryId(val || "")}>
-                <SelectTrigger className="mt-1 bg-zinc-900 border-zinc-800 text-white text-xs h-9">
-                  <SelectValue placeholder="Selecione..." />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-200">
-                  {availableCategories.map((c) => (
-                    <SelectItem key={c.id} value={c.id} className="text-xs focus:bg-zinc-800">
+              <select
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                className="w-full mt-1 bg-zinc-900 border border-zinc-800 text-white rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 h-9"
+              >
+                {availableCategories.length === 0 ? (
+                  <option value="" disabled>Carregando categorias...</option>
+                ) : (
+                  availableCategories.map((c) => (
+                    <option key={c.id} value={c.id} className="bg-[#121215] text-white">
                       {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    </option>
+                  ))
+                )}
+              </select>
             </div>
 
             <div>
               <Label className="text-xs font-medium text-zinc-300">Forma de Pagamento</Label>
-              <Select value={paymentMethod} onValueChange={(val) => setPaymentMethod(val || "PIX")}>
-                <SelectTrigger className="mt-1 bg-zinc-900 border-zinc-800 text-white text-xs h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-200">
-                  <SelectItem value="PIX" className="text-xs">PIX</SelectItem>
-                  <SelectItem value="CREDIT_CARD" className="text-xs">Cartão de Crédito</SelectItem>
-                  <SelectItem value="DEBIT" className="text-xs">Cartão de Débito</SelectItem>
-                  <SelectItem value="CASH" className="text-xs">Dinheiro em Espécie</SelectItem>
-                </SelectContent>
-              </Select>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full mt-1 bg-zinc-900 border border-zinc-800 text-white rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 h-9 font-mono"
+              >
+                <option value="PIX" className="bg-[#121215] text-white">PIX</option>
+                <option value="CREDIT_CARD" className="bg-[#121215] text-white">Cartão de Crédito</option>
+                <option value="DEBIT" className="bg-[#121215] text-white">Cartão de Débito</option>
+                <option value="CASH" className="bg-[#121215] text-white">Dinheiro em Espécie</option>
+              </select>
             </div>
           </div>
 
@@ -233,17 +234,18 @@ export function QuickAddDialog({ open, onOpenChange, onSuccess }: QuickAddDialog
 
             <div>
               <Label className="text-xs font-medium text-zinc-300">Status</Label>
-              <Select value={status} onValueChange={(val) => setStatus(val || "COMPLETED")}>
-                <SelectTrigger className="mt-1 bg-zinc-900 border-zinc-800 text-white text-xs h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-200">
-                  <SelectItem value="COMPLETED" className="text-xs">
-                    {type === "EXPENSE" ? "Pago / Efetivado" : "Recebido"}
-                  </SelectItem>
-                  <SelectItem value="PENDING" className="text-xs">Pendente</SelectItem>
-                </SelectContent>
-              </Select>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full mt-1 bg-zinc-900 border border-zinc-800 text-white rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 h-9 font-medium"
+              >
+                <option value="COMPLETED" className="bg-[#121215] text-white">
+                  {type === "EXPENSE" ? "Pago / Efetivado" : "Recebido"}
+                </option>
+                <option value="PENDING" className="bg-[#121215] text-white">
+                  Pendente
+                </option>
+              </select>
             </div>
           </div>
 

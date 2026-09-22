@@ -5,30 +5,76 @@ export function getDaysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate()
 }
 
+export function getCycleRange(year: number, month: number, cycleStartDay: number = 1) {
+  const clamped = Math.min(28, Math.max(1, Math.round(cycleStartDay || 1)))
+
+  if (clamped <= 1) {
+    const totalDays = new Date(year, month, 0).getDate()
+    const startDate = new Date(year, month - 1, 1, 0, 0, 0)
+    const endDate = new Date(year, month - 1, totalDays, 23, 59, 59)
+    return {
+      startDate,
+      endDate,
+      totalDaysInCycle: totalDays,
+      cycleStartDay: 1,
+      isCustomCycle: false,
+      cycleLabel: `01/${String(month).padStart(2, "0")} a ${String(totalDays).padStart(2, "0")}/${String(month).padStart(2, "0")}`,
+    }
+  }
+
+  // Custom cycle starts on day `clamped` of (year, month - 1)
+  const startDate = new Date(year, month - 1, clamped, 0, 0, 0)
+  const nextMonth = month === 12 ? 1 : month + 1
+  const nextYear = month === 12 ? year + 1 : year
+  const endDate = new Date(nextYear, nextMonth - 1, clamped - 1, 23, 59, 59)
+
+  const diffMs = endDate.getTime() - startDate.getTime()
+  const totalDaysInCycle = Math.round(diffMs / (1000 * 60 * 60 * 24)) + 1
+
+  const startFormatted = `${String(clamped).padStart(2, "0")}/${String(month).padStart(2, "0")}`
+  const endFormatted = `${String(clamped - 1).padStart(2, "0")}/${String(nextMonth).padStart(2, "0")}`
+
+  return {
+    startDate,
+    endDate,
+    totalDaysInCycle,
+    cycleStartDay: clamped,
+    isCustomCycle: true,
+    cycleLabel: `${startFormatted} a ${endFormatted}`,
+  }
+}
+
 export async function getFinancialData(
   year: number,
   month: number,
-  cutoffDay?: number
+  cutoffDay?: number,
+  cycleStartDay: number = 1
 ): Promise<FinancialSummary> {
-  const totalDaysInMonth = getDaysInMonth(year, month)
-  const currentDay = new Date().getDate()
-  const effectiveCutoff = cutoffDay
-    ? Math.min(cutoffDay, totalDaysInMonth)
-    : Math.min(currentDay, totalDaysInMonth)
+  const { startDate, endDate, totalDaysInCycle, cycleLabel, cycleStartDay: resolvedCycleDay } = getCycleRange(year, month, cycleStartDay)
+  const totalDaysInMonth = totalDaysInCycle
 
-  // Start & End date for the entire month
-  const startOfMonth = new Date(year, month - 1, 1, 0, 0, 0)
-  const endOfMonth = new Date(year, month - 1, totalDaysInMonth, 23, 59, 59)
+  // Determine current cycle day
+  const now = new Date()
+  let elapsedDays = 1
+  if (now >= startDate && now <= endDate) {
+    elapsedDays = Math.max(1, Math.min(totalDaysInCycle, Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1))
+  } else if (now > endDate) {
+    elapsedDays = totalDaysInCycle
+  }
+
+  const effectiveCutoff = cutoffDay
+    ? Math.min(cutoffDay, totalDaysInCycle)
+    : elapsedDays
 
   // Cutoff date for expenses/incomes up to that day
-  const cutoffDate = new Date(year, month - 1, effectiveCutoff, 23, 59, 59)
+  const cutoffDate = new Date(startDate.getTime() + (effectiveCutoff - 1) * 24 * 60 * 60 * 1000 + 23 * 3600000 + 59 * 60000 + 59000)
 
-  // Fetch transactions for the month
+  // Fetch transactions for the cycle
   const transactions = await db.transaction.findMany({
     where: {
       dueDate: {
-        gte: startOfMonth,
-        lte: endOfMonth,
+        gte: startDate,
+        lte: endDate,
       },
     },
     include: {
@@ -137,6 +183,10 @@ export async function getFinancialData(
     year,
     cutoffDay: effectiveCutoff,
     totalDaysInMonth,
+    cycleStartDay: resolvedCycleDay,
+    totalDaysInCycle,
+    currentCycleDay: effectiveCutoff,
+    cycleLabel,
     totalIncome: Math.round(totalIncome * 100) / 100,
     recurringIncome: Math.round(recurringIncome * 100) / 100,
     oneOffIncome: Math.round(oneOffIncome * 100) / 100,

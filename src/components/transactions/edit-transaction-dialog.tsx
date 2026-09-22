@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { updateTransactionAction, getCategoriesAction } from "@/actions/finance-actions"
 import { ArrowDownLeft, ArrowUpRight, Calendar, Check, Loader2, Repeat } from "lucide-react"
@@ -173,18 +172,21 @@ export function EditTransactionDialog({
           {/* Category selection */}
           <div className="space-y-1">
             <Label className="text-xs text-zinc-400 font-medium">Categoria</Label>
-            <Select value={categoryId} onValueChange={(val) => setCategoryId(val || "")}>
-              <SelectTrigger className="w-full bg-zinc-900 border-zinc-800 text-zinc-200 text-xs h-9">
-                <SelectValue placeholder="Selecione uma categoria..." />
-              </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-200 text-xs">
-                {availableCategories.map((c) => (
-                  <SelectItem key={c.id} value={c.id} className="text-xs focus:bg-zinc-800">
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 h-9"
+            >
+              {availableCategories.length === 0 ? (
+                <option value="" disabled>Carregando categorias...</option>
+              ) : (
+                availableCategories.map((c) => (
+                  <option key={c.id} value={c.id} className="bg-[#121215] text-zinc-200">
                     {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  </option>
+                ))
+              )}
+            </select>
           </div>
 
           {/* Date & Payment Method */}
@@ -202,17 +204,16 @@ export function EditTransactionDialog({
 
             <div className="space-y-1">
               <Label className="text-xs text-zinc-400 font-medium">Forma de Pagamento</Label>
-              <Select value={paymentMethod} onValueChange={(val) => setPaymentMethod(val || "PIX")}>
-                <SelectTrigger className="w-full bg-zinc-900 border-zinc-800 text-zinc-200 text-xs h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-200 text-xs">
-                  <SelectItem value="PIX">PIX</SelectItem>
-                  <SelectItem value="CREDIT_CARD">Cartão de Crédito</SelectItem>
-                  <SelectItem value="DEBIT">Cartão de Débito</SelectItem>
-                  <SelectItem value="CASH">Dinheiro em Espécie</SelectItem>
-                </SelectContent>
-              </Select>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 h-9"
+              >
+                <option value="PIX" className="bg-[#121215] text-zinc-200">PIX</option>
+                <option value="CREDIT_CARD" className="bg-[#121215] text-zinc-200">Cartão de Crédito</option>
+                <option value="DEBIT" className="bg-[#121215] text-zinc-200">Cartão de Débito</option>
+                <option value="CASH" className="bg-[#121215] text-zinc-200">Dinheiro em Espécie</option>
+              </select>
             </div>
           </div>
 

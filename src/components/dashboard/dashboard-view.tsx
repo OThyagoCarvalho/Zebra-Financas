@@ -56,6 +56,8 @@ export function DashboardView({ initialData, allTransactions }: DashboardViewPro
         totalDaysInMonth={data.totalDaysInMonth}
         onCutoffChange={handleCutoffChange}
         currentMonthName={currentMonthName}
+        cycleStartDay={data.cycleStartDay}
+        cycleLabel={data.cycleLabel}
       />
 
       {/* 2. Top KPI Summary */}

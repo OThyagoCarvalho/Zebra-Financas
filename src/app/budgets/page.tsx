@@ -1,6 +1,7 @@
 import { db } from "@/lib/db"
-import { getDaysInMonth } from "@/lib/budget-engine"
+import { getCycleRange } from "@/lib/budget-engine"
 import { BudgetManager } from "@/components/budgets/budget-manager"
+import { cookies } from "next/headers"
 
 export const dynamic = "force-dynamic"
 
@@ -9,11 +10,13 @@ interface BudgetsPageProps {
 }
 
 export default async function BudgetsPage({ searchParams }: BudgetsPageProps) {
+  const cookieStore = await cookies()
+  const cycleStartDay = parseInt(cookieStore.get("zebra_cycle_start_day")?.value || "1", 10)
+
   const resolvedParams = await searchParams
   const now = new Date()
   const currentActualYear = now.getFullYear()
   const currentActualMonth = now.getMonth() + 1
-  const currentActualDay = now.getDate()
 
   const month = resolvedParams.month
     ? Math.min(12, Math.max(1, parseInt(resolvedParams.month, 10)))
@@ -22,9 +25,14 @@ export default async function BudgetsPage({ searchParams }: BudgetsPageProps) {
     ? parseInt(resolvedParams.year, 10)
     : currentActualYear
 
-  const isCurrentMonth = month === currentActualMonth && year === currentActualYear
-  const totalDaysInMonth = getDaysInMonth(year, month)
-  const currentDay = isCurrentMonth ? currentActualDay : (month < currentActualMonth && year <= currentActualYear ? totalDaysInMonth : 1)
+  const { startDate, endDate, totalDaysInCycle, cycleLabel } = getCycleRange(year, month, cycleStartDay)
+
+  let currentDay = 1
+  if (now >= startDate && now <= endDate) {
+    currentDay = Math.max(1, Math.min(totalDaysInCycle, Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1))
+  } else if (now > endDate) {
+    currentDay = totalDaysInCycle
+  }
 
   // Fetch only expense categories
   const categories = await db.category.findMany({
@@ -37,16 +45,13 @@ export default async function BudgetsPage({ searchParams }: BudgetsPageProps) {
     where: { month, year },
   })
 
-  // Calculate actual expenses for each category for this month
-  const startOfMonth = new Date(year, month - 1, 1, 0, 0, 0)
-  const endOfMonth = new Date(year, month - 1, totalDaysInMonth, 23, 59, 59)
-
+  // Calculate actual expenses for each category for this financial cycle
   const expenses = await db.transaction.findMany({
     where: {
       type: "EXPENSE",
       dueDate: {
-        gte: startOfMonth,
-        lte: endOfMonth,
+        gte: startDate,
+        lte: endDate,
       },
     },
   })
@@ -63,8 +68,10 @@ export default async function BudgetsPage({ searchParams }: BudgetsPageProps) {
       categoryExpenses={categoryExpenses}
       month={month}
       year={year}
-      totalDaysInMonth={totalDaysInMonth}
+      totalDaysInMonth={totalDaysInCycle}
       currentDay={currentDay}
+      cycleStartDay={cycleStartDay}
+      cycleLabel={cycleLabel}
     />
   )
 }

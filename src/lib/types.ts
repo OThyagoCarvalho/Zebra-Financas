@@ -33,6 +33,10 @@ export interface FinancialSummary {
   year: number
   cutoffDay: number
   totalDaysInMonth: number
+  cycleStartDay?: number
+  totalDaysInCycle?: number
+  currentCycleDay?: number
+  cycleLabel?: string
   // Incomes
   totalIncome: number
   recurringIncome: number

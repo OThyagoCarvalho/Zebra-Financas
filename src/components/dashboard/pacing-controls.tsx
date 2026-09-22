@@ -2,12 +2,15 @@
 
 import { CalendarDays, Clock, Filter, SlidersHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { CycleSettingsDialog } from "@/components/layout/cycle-settings-dialog"
 
 interface PacingControlsProps {
   cutoffDay: number
   totalDaysInMonth: number
   onCutoffChange: (day: number) => void
   currentMonthName: string
+  cycleStartDay?: number
+  cycleLabel?: string
 }
 
 export function PacingControls({
@@ -15,6 +18,8 @@ export function PacingControls({
   totalDaysInMonth,
   onCutoffChange,
   currentMonthName,
+  cycleStartDay = 1,
+  cycleLabel,
 }: PacingControlsProps) {
   const percentOfMonth = Math.round((cutoffDay / totalDaysInMonth) * 100)
 
@@ -26,18 +31,29 @@ export function PacingControls({
           <Clock className="w-4 h-4 text-zinc-300" />
         </div>
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-xs font-semibold text-zinc-100 uppercase tracking-wider">
-              Análise Temporal do Mês
+              Análise Temporal do Ciclo
             </h3>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700">
               {currentMonthName}
             </span>
+            <CycleSettingsDialog currentCycleStartDay={cycleStartDay} cycleLabel={cycleLabel} />
           </div>
           <p className="text-[11px] text-zinc-400 mt-0.5">
-            Gastos e receitas contabilizados até o{" "}
-            <strong className="text-zinc-200">dia {cutoffDay}</strong> de {totalDaysInMonth} (
-            {percentOfMonth}% do mês transcorrido)
+            {cycleLabel ? (
+              <span>
+                Ciclo: <strong className="text-zinc-200">{cycleLabel}</strong> • Pacing até o{" "}
+                <strong className="text-zinc-200">dia {cutoffDay}</strong> de {totalDaysInMonth} (
+                {percentOfMonth}% transcorrido)
+              </span>
+            ) : (
+              <span>
+                Gastos e receitas contabilizados até o{" "}
+                <strong className="text-zinc-200">dia {cutoffDay}</strong> de {totalDaysInMonth} (
+                {percentOfMonth}% do mês transcorrido)
+              </span>
+            )}
           </p>
         </div>
       </div>

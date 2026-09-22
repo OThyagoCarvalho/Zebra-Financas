@@ -28,6 +28,7 @@ import {
   deleteCategoryAction,
 } from "@/actions/finance-actions"
 import { useRouter } from "next/navigation"
+import { CycleSettingsDialog } from "@/components/layout/cycle-settings-dialog"
 
 interface BudgetManagerProps {
   categories: any[]
@@ -37,6 +38,8 @@ interface BudgetManagerProps {
   year: number
   totalDaysInMonth: number
   currentDay: number
+  cycleStartDay?: number
+  cycleLabel?: string
 }
 
 const MONTH_NAMES = [
@@ -70,6 +73,8 @@ export function BudgetManager({
   year,
   totalDaysInMonth,
   currentDay,
+  cycleStartDay = 1,
+  cycleLabel,
 }: BudgetManagerProps) {
   const router = useRouter()
 
@@ -217,12 +222,18 @@ export function BudgetManager({
             <span>Planejamento de Orçamentos Mensais</span>
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
-            Personalize metas por categoria e acompanhe o consumo ao longo dos {totalDaysInMonth} dias do mês
+            {cycleLabel ? (
+              <span>Ciclo financeiro: <strong className="text-zinc-200">{cycleLabel}</strong> ({totalDaysInMonth} dias) • Dia atual: <strong className="text-zinc-200">Dia {currentDay}</strong></span>
+            ) : (
+              <span>Personalize metas por categoria e acompanhe o consumo ao longo dos {totalDaysInMonth} dias do mês</span>
+            )}
           </p>
         </div>
 
         {/* Month Selector & Controls */}
         <div className="flex flex-wrap items-center gap-2.5">
+          <CycleSettingsDialog currentCycleStartDay={cycleStartDay} cycleLabel={cycleLabel} />
+
           <div className="flex items-center bg-[#121215] border border-zinc-800 rounded-lg p-0.5">
             <Button
               variant="ghost"
