@@ -69,14 +69,18 @@ export function isHelpCommand(rawMessage: string): boolean {
 /**
  * Generates the full WhatsApp-formatted help guide with dynamic categories from the database
  */
-export async function generateWhatsAppHelpText(): Promise<string> {
+export async function generateWhatsAppHelpText(
+  preloadedCategories?: { name: string; type: string }[]
+): Promise<string> {
   let expenseCats: string[] = []
   let incomeCats: string[] = []
 
   try {
-    const allCategories = await db.category.findMany({
-      orderBy: { name: "asc" },
-    })
+    const allCategories =
+      preloadedCategories ??
+      (await db.category.findMany({
+        orderBy: { name: "asc" },
+      }))
 
     expenseCats = allCategories
       .filter((c) => c.type === "EXPENSE")
@@ -161,11 +165,11 @@ ${incomeListStr}
  * Returns structured help data for the UI modal
  */
 export async function getHelpStructuredData() {
-  const rawText = await generateWhatsAppHelpText()
-
   const allCategories = await db.category.findMany({
     orderBy: { name: "asc" },
   })
+
+  const rawText = await generateWhatsAppHelpText(allCategories)
 
   const expenseCategories = allCategories.filter((c) => c.type === "EXPENSE")
   const incomeCategories = allCategories.filter((c) => c.type === "INCOME")

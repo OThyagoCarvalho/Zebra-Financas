@@ -63,8 +63,8 @@ export async function createTransactionAction(formData: {
     const baseMonth = !isNaN(monthStr) ? monthStr : new Date().getMonth() + 1
     const baseDay = !isNaN(dayStr) ? dayStr : new Date().getDate()
 
-    const createdTransactions = []
     const projectionMonths = 12 // Project forward for 12 months until canceled
+    const recordsToCreate = []
 
     for (let i = 1; i <= projectionMonths; i++) {
       const monthOffset = baseMonth - 1 + (i - 1)
@@ -78,26 +78,27 @@ export async function createTransactionAction(formData: {
       const instStatus = isFirst ? formData.status || "COMPLETED" : "PENDING"
       const instPaidAt = isFirst && instStatus === "COMPLETED" ? targetDueDate : null
 
-      const created = await db.transaction.create({
-        data: {
-          description: formData.description.trim(),
-          amount: Number(formData.amount),
-          type: formData.type,
-          isRecurring: true,
-          recurrenceRule: formData.recurrenceRule || "MONTHLY",
-          categoryId: formData.categoryId,
-          dueDate: targetDueDate,
-          paidAt: instPaidAt,
-          status: instStatus,
-          paymentMethod: method,
-          source: isFirst ? "MANUAL" : "RECURRING",
-          installmentNumber: i,
-          totalInstallments: null,
-          installmentGroupId: groupId,
-        },
+      recordsToCreate.push({
+        description: formData.description.trim(),
+        amount: Number(formData.amount),
+        type: formData.type,
+        isRecurring: true,
+        recurrenceRule: formData.recurrenceRule || "MONTHLY",
+        categoryId: formData.categoryId,
+        dueDate: targetDueDate,
+        paidAt: instPaidAt,
+        status: instStatus,
+        paymentMethod: method,
+        source: isFirst ? "MANUAL" : "RECURRING",
+        installmentNumber: i,
+        totalInstallments: null,
+        installmentGroupId: groupId,
       })
-      createdTransactions.push(created)
     }
+
+    const createdTransactions = await db.$transaction(
+      recordsToCreate.map((data) => db.transaction.create({ data }))
+    )
 
     revalidatePath("/")
     revalidatePath("/transactions")
@@ -118,7 +119,7 @@ export async function createTransactionAction(formData: {
     const baseMonth = !isNaN(monthStr) ? monthStr : new Date().getMonth() + 1
     const baseDay = !isNaN(dayStr) ? dayStr : new Date().getDate()
 
-    const createdTransactions = []
+    const recordsToCreate = []
 
     for (let i = 1; i <= installments; i++) {
       const monthOffset = baseMonth - 1 + (i - 1)
@@ -137,26 +138,27 @@ export async function createTransactionAction(formData: {
       const instStatus = isFirst ? formData.status || "COMPLETED" : "PENDING"
       const instPaidAt = isFirst && instStatus === "COMPLETED" ? targetDueDate : null
 
-      const created = await db.transaction.create({
-        data: {
-          description: `${formData.description.trim()} (${i}/${installments})`,
-          amount: installmentAmount,
-          type: "EXPENSE",
-          isRecurring: false,
-          recurrenceRule: null,
-          categoryId: formData.categoryId,
-          dueDate: targetDueDate,
-          paidAt: instPaidAt,
-          status: instStatus,
-          paymentMethod: method,
-          source: "MANUAL",
-          installmentNumber: i,
-          totalInstallments: installments,
-          installmentGroupId: groupId,
-        },
+      recordsToCreate.push({
+        description: `${formData.description.trim()} (${i}/${installments})`,
+        amount: installmentAmount,
+        type: "EXPENSE",
+        isRecurring: false,
+        recurrenceRule: null,
+        categoryId: formData.categoryId,
+        dueDate: targetDueDate,
+        paidAt: instPaidAt,
+        status: instStatus,
+        paymentMethod: method,
+        source: "MANUAL",
+        installmentNumber: i,
+        totalInstallments: installments,
+        installmentGroupId: groupId,
       })
-      createdTransactions.push(created)
     }
+
+    const createdTransactions = await db.$transaction(
+      recordsToCreate.map((data) => db.transaction.create({ data }))
+    )
 
     revalidatePath("/")
     revalidatePath("/transactions")
@@ -297,22 +299,57 @@ export async function getCardInvoicesAction(year: number, month: number) {
   const cycleStartDay = await getCycleStartDayAction()
   const { startDate, endDate, cycleLabel, totalDaysInCycle } = getCycleRange(year, month, cycleStartDay)
 
-  // Fetch all expense transactions in this cycle
-  const currentCycleTransactions = await db.transaction.findMany({
-    where: {
-      type: "EXPENSE",
-      dueDate: {
-        gte: startDate,
-        lte: endDate,
+  // Pre-calculate future cycles for 6 months
+  const futureCycles: {
+    pYear: number
+    pMonth: number
+    pRange: ReturnType<typeof getCycleRange>
+  }[] = []
+
+  for (let offset = 1; offset <= 6; offset++) {
+    const mIndex = (month - 1) + offset
+    const pYear = year + Math.floor(mIndex / 12)
+    const pMonth = (mIndex % 12) + 1
+    const pRange = getCycleRange(pYear, pMonth, cycleStartDay)
+    futureCycles.push({ pYear, pMonth, pRange })
+  }
+
+  const projectionStartDate = futureCycles[0].pRange.startDate
+  const projectionEndDate = futureCycles[futureCycles.length - 1].pRange.endDate
+
+  // Fetch current cycle transactions and all 6-month projected transactions concurrently
+  const [currentCycleTransactions, projectedTransactions] = await Promise.all([
+    db.transaction.findMany({
+      where: {
+        type: "EXPENSE",
+        dueDate: {
+          gte: startDate,
+          lte: endDate,
+        },
       },
-    },
-    include: {
-      category: true,
-    },
-    orderBy: {
-      dueDate: "desc",
-    },
-  })
+      include: {
+        category: true,
+      },
+      orderBy: {
+        dueDate: "desc",
+      },
+    }),
+    db.transaction.findMany({
+      where: {
+        type: "EXPENSE",
+        status: { not: "CANCELED" },
+        dueDate: {
+          gte: projectionStartDate,
+          lte: projectionEndDate,
+        },
+      },
+      select: {
+        amount: true,
+        paymentMethod: true,
+        dueDate: true,
+      },
+    }),
+  ])
 
   // Group by card
   const cardsSummary: Record<string, {
@@ -362,40 +399,19 @@ export async function getCardInvoicesAction(year: number, month: number) {
     cardsSummary[cardId].transactions.push(t)
   }
 
-  // Future projections for next 6 cycles
-  const projections: {
-    year: number
-    month: number
-    label: string
-    cycleLabel: string
-    totalProjected: number
-    byCard: Record<string, number>
-  }[] = []
-
+  // Future projections for next 6 cycles (grouped in memory from the single consolidated query)
   const MONTH_NAMES = [
     "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
     "Jul", "Ago", "Set", "Out", "Nov", "Dez"
   ]
 
-  for (let offset = 1; offset <= 6; offset++) {
-    const mIndex = (month - 1) + offset
-    const pYear = year + Math.floor(mIndex / 12)
-    const pMonth = (mIndex % 12) + 1
-    const pRange = getCycleRange(pYear, pMonth, cycleStartDay)
+  const projections = futureCycles.map(({ pYear, pMonth, pRange }) => {
+    const startMs = pRange.startDate.getTime()
+    const endMs = pRange.endDate.getTime()
 
-    const pTransactions = await db.transaction.findMany({
-      where: {
-        type: "EXPENSE",
-        status: { not: "CANCELED" },
-        dueDate: {
-          gte: pRange.startDate,
-          lte: pRange.endDate,
-        },
-      },
-      select: {
-        amount: true,
-        paymentMethod: true,
-      },
+    const pTransactions = projectedTransactions.filter((pt) => {
+      const time = new Date(pt.dueDate).getTime()
+      return time >= startMs && time <= endMs
     })
 
     let pTotal = 0
@@ -412,15 +428,15 @@ export async function getCardInvoicesAction(year: number, month: number) {
       }
     }
 
-    projections.push({
+    return {
       year: pYear,
       month: pMonth,
       label: `${MONTH_NAMES[pMonth - 1]}/${String(pYear).slice(2)}`,
       cycleLabel: pRange.cycleLabel,
       totalProjected: pTotal,
       byCard,
-    })
-  }
+    }
+  })
 
   let grandTotal = 0
   let grandPaid = 0
@@ -595,30 +611,32 @@ export async function copyBudgetPlansFromPreviousMonthAction(
     }
   }
 
-  let copiedCount = 0
-  for (const plan of prevPlans) {
-    await db.budgetPlan.upsert({
-      where: {
-        categoryId_month_year: {
+  await db.$transaction(
+    prevPlans.map((plan) =>
+      db.budgetPlan.upsert({
+        where: {
+          categoryId_month_year: {
+            categoryId: plan.categoryId,
+            month: targetMonth,
+            year: targetYear,
+          },
+        },
+        update: {
+          targetAmount: plan.targetAmount,
+          alertThreshold: plan.alertThreshold,
+        },
+        create: {
           categoryId: plan.categoryId,
           month: targetMonth,
           year: targetYear,
+          targetAmount: plan.targetAmount,
+          alertThreshold: plan.alertThreshold,
         },
-      },
-      update: {
-        targetAmount: plan.targetAmount,
-        alertThreshold: plan.alertThreshold,
-      },
-      create: {
-        categoryId: plan.categoryId,
-        month: targetMonth,
-        year: targetYear,
-        targetAmount: plan.targetAmount,
-        alertThreshold: plan.alertThreshold,
-      },
-    })
-    copiedCount++
-  }
+      })
+    )
+  )
+
+  const copiedCount = prevPlans.length
 
   revalidatePath("/")
   revalidatePath("/budgets")

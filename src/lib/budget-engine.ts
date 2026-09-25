@@ -69,24 +69,35 @@ export async function getFinancialData(
   // Cutoff date for expenses/incomes up to that day
   const cutoffDate = new Date(startDate.getTime() + (effectiveCutoff - 1) * 24 * 60 * 60 * 1000 + 23 * 3600000 + 59 * 60000 + 59000)
 
-  // Fetch transactions for the cycle (excluding canceled ones)
-  const transactions = await db.transaction.findMany({
-    where: {
-      dueDate: {
-        gte: startDate,
-        lte: endDate,
+  // Fetch transactions for the cycle (excluding canceled ones) and Budget Plans concurrently
+  const [transactions, budgetPlans] = await Promise.all([
+    db.transaction.findMany({
+      where: {
+        dueDate: {
+          gte: startDate,
+          lte: endDate,
+        },
+        status: {
+          not: "CANCELED",
+        },
       },
-      status: {
-        not: "CANCELED",
+      include: {
+        category: true,
       },
-    },
-    include: {
-      category: true,
-    },
-    orderBy: {
-      dueDate: "desc",
-    },
-  })
+      orderBy: {
+        dueDate: "desc",
+      },
+    }),
+    db.budgetPlan.findMany({
+      where: {
+        month,
+        year,
+      },
+      include: {
+        category: true,
+      },
+    }),
+  ])
 
   // Filter transactions up to the cutoff date for current budget pacing
   const transactionsUpToCutoff = transactions.filter(
@@ -120,17 +131,6 @@ export async function getFinancialData(
       }
     }
   }
-
-  // Fetch Budget Plans for this month
-  const budgetPlans = await db.budgetPlan.findMany({
-    where: {
-      month,
-      year,
-    },
-    include: {
-      category: true,
-    },
-  })
 
   // Calculate budget pacing
   let totalBudgetPlanned = 0
@@ -203,5 +203,6 @@ export async function getFinancialData(
     budgetAdherencePercent,
     budgets,
     recentTransactions: transactions.slice(0, 10),
+    allCycleTransactions: transactions,
   }
 }

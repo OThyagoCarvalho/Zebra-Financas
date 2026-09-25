@@ -55,4 +55,5 @@ export interface FinancialSummary {
   // Lists
   budgets: BudgetPacing[]
   recentTransactions: any[]
+  allCycleTransactions?: any[]
 }

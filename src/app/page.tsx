@@ -1,5 +1,4 @@
-import { getFinancialData, getCycleRange } from "@/lib/budget-engine"
-import { db } from "@/lib/db"
+import { getFinancialData } from "@/lib/budget-engine"
 import { DashboardView } from "@/components/dashboard/dashboard-view"
 import { cookies } from "next/headers"
 
@@ -16,23 +15,10 @@ export default async function HomePage() {
 
   const summary = await getFinancialData(currentYear, currentMonth, currentDay, cycleStartDay)
 
-  // Fetch transactions for the active financial cycle
-  const { startDate, endDate } = getCycleRange(currentYear, currentMonth, cycleStartDay)
-
-  const allTransactions = await db.transaction.findMany({
-    where: {
-      dueDate: {
-        gte: startDate,
-        lte: endDate,
-      },
-    },
-    include: {
-      category: true,
-    },
-    orderBy: {
-      dueDate: "asc",
-    },
-  })
+  // Re-use active cycle transactions already fetched and cached by getFinancialData, sorted ascending for charts
+  const allTransactions = (summary.allCycleTransactions || [])
+    .slice()
+    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
 
   return (
     <DashboardView
