@@ -41,6 +41,12 @@ model Transaction {
   
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
+  @@index([dueDate])
+  @@index([categoryId, dueDate])
+  @@index([installmentGroupId])
+  @@index([paymentMethod, dueDate])
+  @@index([status])
 }
 
 model BudgetPlan {
@@ -56,6 +62,7 @@ model BudgetPlan {
   updatedAt      DateTime     @updatedAt
 
   @@unique([categoryId, month, year])
+  @@index([year, month])
 }
 
 model WhatsAppConfig {
@@ -76,4 +83,6 @@ model WhatsAppMessageLog {
   replyText     String?
   errorMessage  String?
   createdAt     DateTime      @default(now())
+
+  @@index([createdAt])
 }

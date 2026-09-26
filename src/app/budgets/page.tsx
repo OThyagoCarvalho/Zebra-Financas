@@ -34,31 +34,32 @@ export default async function BudgetsPage({ searchParams }: BudgetsPageProps) {
     currentDay = totalDaysInCycle
   }
 
-  // Fetch only expense categories
-  const categories = await db.category.findMany({
-    where: { type: "EXPENSE" },
-    orderBy: { name: "asc" },
-  })
-
-  // Fetch budget plans for this month
-  const budgetPlans = await db.budgetPlan.findMany({
-    where: { month, year },
-  })
-
-  // Calculate actual expenses for each category for this financial cycle
-  const expenses = await db.transaction.findMany({
-    where: {
-      type: "EXPENSE",
-      dueDate: {
-        gte: startDate,
-        lte: endDate,
+  // Fetch categories, budget plans, and category expense sums concurrently
+  const [categories, budgetPlans, expenseAggregates] = await Promise.all([
+    db.category.findMany({
+      where: { type: "EXPENSE" },
+      orderBy: { name: "asc" },
+    }),
+    db.budgetPlan.findMany({
+      where: { month, year },
+    }),
+    db.transaction.groupBy({
+      by: ["categoryId"],
+      _sum: { amount: true },
+      where: {
+        type: "EXPENSE",
+        status: { not: "CANCELED" },
+        dueDate: {
+          gte: startDate,
+          lte: endDate,
+        },
       },
-    },
-  })
+    }),
+  ])
 
   const categoryExpenses: Record<string, number> = {}
-  for (const exp of expenses) {
-    categoryExpenses[exp.categoryId] = (categoryExpenses[exp.categoryId] || 0) + exp.amount
+  for (const agg of expenseAggregates) {
+    categoryExpenses[agg.categoryId] = agg._sum.amount || 0
   }
 
   return (
