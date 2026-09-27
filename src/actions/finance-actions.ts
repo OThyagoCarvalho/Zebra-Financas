@@ -834,3 +834,211 @@ export async function updateWhatsAppConfigAction(data: {
 export async function getHelpGuideAction() {
   return await getHelpStructuredData()
 }
+
+export interface GetRecurringAccountsParams {
+  year?: number
+  month?: number
+  page?: number
+  pageSize?: number
+  paymentFilter?: "NO_CARD" | "CARD_ONLY" | "ALL"
+  statusFilter?: "PENDING" | "COMPLETED" | "ALL"
+  typeFilter?: "EXPENSE" | "INCOME" | "ALL"
+}
+
+const CREDIT_CARD_METHODS = [
+  "CREDIT_BB",
+  "CREDIT_CAIXA",
+  "CREDIT_XP",
+  "CREDIT_INTER",
+  "CREDIT_CARD",
+]
+
+export async function getRecurringAccountsAction(params?: GetRecurringAccountsParams) {
+  const page = Math.max(1, params?.page || 1)
+  const pageSize = Math.max(5, Math.min(100, params?.pageSize || 15))
+  const paymentFilter = params?.paymentFilter || "NO_CARD"
+  const statusFilter = params?.statusFilter || "PENDING"
+  const typeFilter = params?.typeFilter || "EXPENSE"
+
+  const now = new Date()
+  const targetYear = params?.year || now.getFullYear()
+  const targetMonth = params?.month || now.getMonth() + 1
+
+  const cycleStartDay = await getCycleStartDayAction()
+  const { startDate, endDate, cycleLabel, totalDaysInCycle } = getCycleRange(targetYear, targetMonth, cycleStartDay)
+
+  const paymentCondition =
+    paymentFilter === "NO_CARD"
+      ? { NOT: { paymentMethod: { in: CREDIT_CARD_METHODS } } }
+      : paymentFilter === "CARD_ONLY"
+      ? { paymentMethod: { in: CREDIT_CARD_METHODS } }
+      : {}
+
+  const typeCondition =
+    typeFilter === "EXPENSE"
+      ? { type: "EXPENSE" }
+      : typeFilter === "INCOME"
+      ? { type: "INCOME" }
+      : {}
+
+  const statusCondition =
+    statusFilter === "PENDING"
+      ? { status: "PENDING" }
+      : statusFilter === "COMPLETED"
+      ? { status: "COMPLETED" }
+      : { status: { not: "CANCELED" } }
+
+  const cycleWhere = {
+    OR: [
+      { isRecurring: true },
+      { installmentGroupId: { startsWith: "rec_" } },
+    ],
+    dueDate: {
+      gte: startDate,
+      lte: endDate,
+    },
+    ...typeCondition,
+    ...paymentCondition,
+    ...statusCondition,
+  }
+
+  const [items, totalCount, overdueBeforeCycle, cycleItems] = await Promise.all([
+    db.transaction.findMany({
+      where: cycleWhere,
+      include: {
+        category: true,
+      },
+      orderBy: {
+        dueDate: "asc",
+      },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    db.transaction.count({
+      where: cycleWhere,
+    }),
+    db.transaction.findMany({
+      where: {
+        OR: [
+          { isRecurring: true },
+          { installmentGroupId: { startsWith: "rec_" } },
+        ],
+        dueDate: {
+          lt: startDate,
+        },
+        status: "PENDING",
+        type: "EXPENSE",
+        ...paymentCondition,
+      },
+      include: {
+        category: true,
+      },
+      orderBy: {
+        dueDate: "asc",
+      },
+    }),
+    db.transaction.findMany({
+      where: {
+        OR: [
+          { isRecurring: true },
+          { installmentGroupId: { startsWith: "rec_" } },
+        ],
+        dueDate: {
+          gte: startDate,
+          lte: endDate,
+        },
+        status: { not: "CANCELED" },
+        type: "EXPENSE",
+        ...paymentCondition,
+      },
+      select: {
+        id: true,
+        amount: true,
+        status: true,
+        dueDate: true,
+      },
+    }),
+  ])
+
+  // KPIs calculation
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+  const in7Days = new Date(todayEnd.getTime() + 7 * 24 * 60 * 60 * 1000)
+
+  let totalPendingAmount = 0
+  let totalPaidAmount = 0
+  let pendingCount = 0
+  let paidCount = 0
+  let overdueCount = 0
+  let overdueAmount = 0
+  let dueTodayCount = 0
+  let dueTodayAmount = 0
+  let dueIn7DaysCount = 0
+  let dueIn7DaysAmount = 0
+
+  for (const item of cycleItems) {
+    const dueTime = new Date(item.dueDate).getTime()
+    if (item.status === "COMPLETED") {
+      totalPaidAmount += item.amount
+      paidCount++
+    } else if (item.status === "PENDING") {
+      totalPendingAmount += item.amount
+      pendingCount++
+
+      if (dueTime < todayStart.getTime()) {
+        overdueCount++
+        overdueAmount += item.amount
+      } else if (dueTime <= todayEnd.getTime()) {
+        dueTodayCount++
+        dueTodayAmount += item.amount
+      } else if (dueTime <= in7Days.getTime()) {
+        dueIn7DaysCount++
+        dueIn7DaysAmount += item.amount
+      }
+    }
+  }
+
+  const totalCycleAmount = totalPendingAmount + totalPaidAmount
+  const paidPercentage = totalCycleAmount > 0 ? Math.round((totalPaidAmount / totalCycleAmount) * 100) : 0
+
+  return {
+    items,
+    pagination: {
+      page,
+      pageSize,
+      totalCount,
+      totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
+    },
+    kpis: {
+      totalPendingAmount: Math.round(totalPendingAmount * 100) / 100,
+      totalPaidAmount: Math.round(totalPaidAmount * 100) / 100,
+      totalCycleAmount: Math.round(totalCycleAmount * 100) / 100,
+      paidPercentage,
+      pendingCount,
+      paidCount,
+      overdueCount,
+      overdueAmount: Math.round(overdueAmount * 100) / 100,
+      dueTodayCount,
+      dueTodayAmount: Math.round(dueTodayAmount * 100) / 100,
+      dueIn7DaysCount,
+      dueIn7DaysAmount: Math.round(dueIn7DaysAmount * 100) / 100,
+      overdueBeforeCycleCount: overdueBeforeCycle.length,
+      overdueBeforeCycleAmount: Math.round(overdueBeforeCycle.reduce((acc, curr) => acc + curr.amount, 0) * 100) / 100,
+    },
+    overdueBeforeCycle,
+    cycle: {
+      year: targetYear,
+      month: targetMonth,
+      cycleStartDay,
+      cycleLabel,
+      totalDaysInCycle,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+    },
+    filters: {
+      paymentFilter,
+      statusFilter,
+      typeFilter,
+    },
+  }
+}

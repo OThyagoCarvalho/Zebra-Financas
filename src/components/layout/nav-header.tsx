@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Plus, Wallet, PieChart, ArrowLeftRight, LogOut, CreditCard, HelpCircle } from "lucide-react"
+import { Plus, Wallet, PieChart, ArrowLeftRight, LogOut, CreditCard, HelpCircle, Repeat } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { QuickAddDialog } from "@/components/transactions/quick-add-dialog"
@@ -23,6 +23,7 @@ export function NavHeader() {
   const navItems = [
     { label: "Visão Geral", href: "/", icon: Wallet },
     { label: "Transações", href: "/transactions", icon: ArrowLeftRight },
+    { label: "Recorrentes", href: "/recurring", icon: Repeat },
     { label: "Orçamentos", href: "/budgets", icon: PieChart },
     { label: "Cartões", href: "/cards", icon: CreditCard },
   ]

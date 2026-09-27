@@ -14,18 +14,28 @@ interface QuickAddDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: () => void
+  defaultRecurring?: boolean
+  defaultStatus?: string
+  defaultPaymentMethod?: string
 }
 
-export function QuickAddDialog({ open, onOpenChange, onSuccess }: QuickAddDialogProps) {
+export function QuickAddDialog({
+  open,
+  onOpenChange,
+  onSuccess,
+  defaultRecurring = false,
+  defaultStatus = "COMPLETED",
+  defaultPaymentMethod = "PIX",
+}: QuickAddDialogProps) {
   const [type, setType] = useState<"EXPENSE" | "INCOME">("EXPENSE")
-  const [isRecurring, setIsRecurring] = useState(false)
+  const [isRecurring, setIsRecurring] = useState(defaultRecurring)
   const [description, setDescription] = useState("")
   const [amount, setAmount] = useState("")
   const [categoryId, setCategoryId] = useState("")
-  const [paymentMethod, setPaymentMethod] = useState("PIX")
+  const [paymentMethod, setPaymentMethod] = useState(defaultPaymentMethod)
   const [installments, setInstallments] = useState(1)
   const [dueDate, setDueDate] = useState(new Date().toISOString().split("T")[0])
-  const [status, setStatus] = useState("COMPLETED")
+  const [status, setStatus] = useState(defaultStatus)
 
   const [categories, setCategories] = useState<{ id: string; name: string; type: string }[]>([])
   const [loading, setLoading] = useState(false)
@@ -33,6 +43,9 @@ export function QuickAddDialog({ open, onOpenChange, onSuccess }: QuickAddDialog
 
   useEffect(() => {
     if (open) {
+      setIsRecurring(defaultRecurring)
+      setStatus(defaultStatus)
+      setPaymentMethod(defaultPaymentMethod)
       setFetchingCats(true)
       getCategoriesAction()
         .then((cats) => {
@@ -44,7 +57,7 @@ export function QuickAddDialog({ open, onOpenChange, onSuccess }: QuickAddDialog
         })
         .finally(() => setFetchingCats(false))
     }
-  }, [open, type])
+  }, [open, type, defaultRecurring, defaultStatus, defaultPaymentMethod])
 
   // When type changes, select the first matching category
   const handleTypeChange = (newType: string) => {
