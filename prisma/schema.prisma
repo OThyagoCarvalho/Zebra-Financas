@@ -47,6 +47,8 @@ model Transaction {
   @@index([installmentGroupId])
   @@index([paymentMethod, dueDate])
   @@index([status])
+  @@index([isRecurring, dueDate])
+  @@index([isRecurring, status, dueDate])
 }
 
 model BudgetPlan {
